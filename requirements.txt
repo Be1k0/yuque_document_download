@@ -1,0 +1,8 @@
+nest_asyncio
+cryptography
+colorama
+aiohttp
+InquirerPy
+PyQt5
+requests
+pillow
