@@ -177,3 +177,5 @@ pyrightconfig.json
 
 .meta/
 debug_logs/
+
+pyvenv.cfg
