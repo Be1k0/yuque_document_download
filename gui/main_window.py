@@ -115,16 +115,26 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
             margin-right: 2px;
+            outline: none;
         }
         
         QTabBar::tab:selected {
             background-color: #ffffff;
             color: #0d6efd;
             border-bottom: none;
+            outline: none;
         }
         
         QTabBar::tab:hover:!selected {
             background-color: #dee2e6;
+        }
+        
+        QTabBar::tab:focus {
+            outline: none;
+        }
+        
+        QTabBar::focus {
+            outline: none;
         }
         
         QPushButton {
@@ -134,6 +144,11 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             border-radius: 4px;
             padding: 6px 12px;
             min-width: 80px;
+            outline: none;
+        }
+        
+        QPushButton:focus {
+            outline: none;
         }
         
         QPushButton:hover {
@@ -154,10 +169,12 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             border-radius: 4px;
             padding: 6px;
             background-color: white;
+            outline: none;
         }
         
         QLineEdit:focus, QTextEdit:focus {
             border: 1px solid #0d6efd;
+            outline: none;
         }
         
         /* 更新列表框样式 */
@@ -168,6 +185,10 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             background-color: white;
             outline: none;
             selection-background-color: transparent;
+        }
+        
+        QListWidget:focus {
+            outline: none;
         }
         
         QListWidget::item {
@@ -212,11 +233,21 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             min-height: 20px;
             padding: 0;
             margin: 0;
+            outline: none;
         }
         
         QCheckBox::indicator {
             width: 18px;
             height: 18px;
+            outline: none;
+        }
+        
+        QCheckBox:focus {
+            outline: none;
+        }
+        
+        QCheckBox::indicator:focus {
+            outline: none;
         }
         
 
@@ -394,6 +425,11 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             sys.stdout = self.redirector.old_stdout
             sys.stderr = self.redirector.old_stderr
         super().closeEvent(event)
+    
+    def on_tab_changed(self, index):
+        """标签页切换时的处理"""
+        # 仅在知识库选择页显示进度条
+        self.progress_widget.setVisible(index == self.selection_tab_index)
 
     def init_ui(self):
         # Main container
@@ -539,18 +575,22 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.logout_button.setMinimumHeight(36)
         self.logout_button.setStyleSheet("""
             QPushButton {
-                background-color: #dc3545;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #c82333;
-            }
-            QPushButton:pressed {
-                background-color: #bd2130;
-            }
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            outline: none;
+        }
+        QPushButton:hover {
+            background-color: #c82333;
+        }
+        QPushButton:pressed {
+            background-color: #bd2130;
+        }
+        QPushButton:focus {
+            outline: none;
+        }
         """)
         self.logout_button.clicked.connect(self.logout)
         user_info_layout.addWidget(self.logout_button)
@@ -897,7 +937,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 添加标签页
         tabs.addTab(login_page, "登录")
-        tabs.addTab(selection_page, "知识库选择")
+        self.selection_tab_index = tabs.addTab(selection_page, "知识库选择")
         tabs.addTab(settings_page, "设置")
         
         # 创建并添加日志页面
@@ -906,6 +946,9 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         
         tabs.addTab(about_page, "关于")
 
+        # 连接标签页切换信号
+        tabs.currentChanged.connect(self.on_tab_changed)
+
         top_layout.addWidget(tabs)
         main_splitter.addWidget(top_widget)
 
@@ -913,9 +956,9 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # main_splitter.addWidget(bottom_widget)
         # main_splitter.setHandleWidth(0)
 
-        # 添加进度条到底部 - 跨所有标签页可见
-        progress_widget = QWidget()
-        progress_layout = QVBoxLayout(progress_widget)
+        # 添加进度条到底部 - 仅在知识库选择页可见
+        self.progress_widget = QWidget()
+        progress_layout = QVBoxLayout(self.progress_widget)
         progress_layout.setContentsMargins(10, 10, 10, 10)
         progress_layout.setSpacing(8)
 
@@ -949,7 +992,10 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         """)
         progress_layout.addWidget(self.progress_bar)
 
-        main_layout.addWidget(progress_widget)
+        main_layout.addWidget(self.progress_widget)
+        
+        # 默认隐藏进度条，仅在知识库选择页显示
+        self.progress_widget.setVisible(False)
 
         # Add copyright info
         copyright_label = QLabel("Copyright © 2025 By Be1k0 | https://github.com/Be1k0")

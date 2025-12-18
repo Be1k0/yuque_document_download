@@ -65,7 +65,7 @@ class BookManagerMixin:
 
         # 先添加个人知识库
         for item in owner_books:
-            list_item = QListWidgetItem(f"👤 {item.name}")
+            list_item = QListWidgetItem(f"📚 {item.name}")
             list_item.setToolTip(f"个人知识库: {item.name}\n包含 {item.items_count} 篇文档")
             # 存储namespace信息用于后续加载文章
             namespace = ""
@@ -83,7 +83,7 @@ class BookManagerMixin:
 
         # 再添加团队知识库
         for item in other_books:
-            list_item = QListWidgetItem(f"👥 {item.name}")
+            list_item = QListWidgetItem(f"📚 {item.name}")
             list_item.setToolTip(f"团队知识库: {item.name}\n包含 {item.items_count} 篇文档")
             # 存储namespace信息
             namespace = ""
