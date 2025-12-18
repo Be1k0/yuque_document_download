@@ -92,8 +92,12 @@ class LoginManagerMixin:
     def update_user_info_display(self):
         """更新用户信息显示"""
         try:
+            # 确保.meta文件夹存在
+            meta_dir = resource_path('.meta')
+            os.makedirs(meta_dir, exist_ok=True)
+            
             # 读取用户信息文件
-            user_info_path = resource_path(os.path.join('.meta', 'user_info.json'))
+            user_info_path = os.path.join(meta_dir, 'user_info.json')
             if os.path.exists(user_info_path):
                 with open(user_info_path, 'r', encoding='utf-8') as f:
                     user_data = json.load(f)
@@ -107,9 +111,17 @@ class LoginManagerMixin:
                     self.user_name_label.setText(f"用户名: {name}")
                     self.user_id_label.setText(f"用户ID: {login}")
 
+                    # 头像文件路径
+                    avatar_file = os.path.join(meta_dir, 'avatar.jpg')
+                    
                     # 加载头像
                     if avatar_url:
-                        self.load_avatar(avatar_url)
+                        if os.path.exists(avatar_file):
+                            # 如果本地存在头像文件，直接加载
+                            self.load_avatar_from_local(avatar_file)
+                        else:
+                            # 否则从网络下载
+                            self.load_avatar(avatar_url)
                     else:
                         # 设置默认头像
                         self.avatar_label.setText("头像")
@@ -130,7 +142,30 @@ class LoginManagerMixin:
 
         except Exception as e:
             Log.error(f"更新用户信息显示时出错: {e}")
+            import traceback
+            traceback.print_exc()
 
+    def load_avatar_from_local(self, avatar_path):
+        """从本地文件加载头像"""
+        try:
+            Log.debug(f"从本地文件加载头像: {avatar_path}")
+            pixmap = QPixmap(avatar_path)
+            if not pixmap.isNull():
+                # 缩放头像到合适大小
+                scaled_pixmap = pixmap.scaled(76, 76, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                # 创建圆形头像
+                circular_pixmap = create_circular_pixmap(scaled_pixmap, 76)
+                self.avatar_label.setPixmap(circular_pixmap)
+                Log.debug("本地头像加载成功")
+            else:
+                Log.error("本地头像文件无效")
+                self.avatar_label.setText("头像")
+        except Exception as e:
+            Log.error(f"加载本地头像时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            self.avatar_label.setText("头像")
+    
     def load_avatar(self, avatar_url):
         """加载用户头像"""
         try:
@@ -163,6 +198,14 @@ class LoginManagerMixin:
             if reply.error() == reply.NoError:
                 data = reply.readAll()
                 Log.debug(f"接收到头像数据，大小: {len(data)} 字节")
+                
+                # 保存头像到本地
+                meta_dir = resource_path('.meta')
+                avatar_file = os.path.join(meta_dir, 'avatar.jpg')
+                with open(avatar_file, 'wb') as f:
+                    f.write(data)
+                Log.debug(f"头像保存到本地成功: {avatar_file}")
+                
                 pixmap = QPixmap()
                 if pixmap.loadFromData(data):
                     Log.debug("头像数据加载成功，开始处理")
