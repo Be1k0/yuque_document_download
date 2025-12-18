@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, 
-    QRadioButton, QButtonGroup, QCheckBox, QMessageBox
+    QRadioButton, QButtonGroup, QCheckBox, QMessageBox, QPushButton
 )
 from PyQt5.QtGui import QFont, QPixmap, QIntValidator
 from PyQt5.QtCore import Qt
@@ -116,7 +116,65 @@ class SettingsManagerMixin:
         debug_group.setLayout(debug_layout)
         settings_layout.addWidget(debug_group)
 
+        # 按钮区域
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(15)
+        buttons_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 保存按钮
+        self.save_settings_btn = QPushButton("保存设置")
+        self.save_settings_btn.setMinimumHeight(36)
+        self.save_settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0d6efd;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 16px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0b5ed7;
+            }
+            QPushButton:pressed {
+                background-color: #0a58ca;
+            }
+        """)
+        self.save_settings_btn.clicked.connect(self.save_settings)
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(self.save_settings_btn)
+        
+        # 重置按钮
+        self.reset_settings_btn = QPushButton("重置设置")
+        self.reset_settings_btn.setMinimumHeight(36)
+        self.reset_settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 16px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #5c636a;
+            }
+            QPushButton:pressed {
+                background-color: #495057;
+            }
+        """)
+        self.reset_settings_btn.clicked.connect(self.reset_settings)
+        buttons_layout.addWidget(self.reset_settings_btn)
+        
+        settings_layout.addLayout(buttons_layout)
+        
         settings_layout.addStretch()
+        
+        # 加载保存的设置
+        self.load_saved_settings()
+        
         return settings_page
 
     def auto_save_settings(self):
@@ -148,6 +206,116 @@ class SettingsManagerMixin:
             QMessageBox.warning(self, "输入错误", "下载线程数必须是1-30之间的数字！")
             self.threads_input.setText(str(self.download_threads))
 
+    def save_settings(self):
+        """保存设置到文件"""
+        try:
+            import json
+            import os
+            from utils import resource_path
+            
+            # 确保.meta文件夹存在
+            meta_dir = resource_path('.meta')
+            os.makedirs(meta_dir, exist_ok=True)
+            
+            # 配置文件路径
+            config_file = os.path.join(meta_dir, 'settings.json')
+            
+            # 收集当前设置
+            settings = {
+                'download_threads': self.download_threads,
+                'image_rename_mode': self.image_rename_mode,
+                'image_file_prefix': self.image_file_prefix,
+                'yuque_cdn_domain': self.yuque_cdn_domain
+            }
+            
+            # 保存到文件
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+            
+            QMessageBox.information(self, "保存成功", "设置已成功保存！")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存设置时出错: {str(e)}")
+            Log.error(f"保存设置时出错: {e}")
+    
+    def reset_settings(self):
+        """重置设置为默认值"""
+        reply = QMessageBox.question(self, "确认重置", "确定要将所有设置重置为默认值吗？软件将自动重启。",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                import os
+                import sys
+                import subprocess
+                from utils import resource_path
+                
+                # 配置文件路径
+                config_file = os.path.join(resource_path('.meta'), 'settings.json')
+                
+                # 删除配置文件
+                if os.path.exists(config_file):
+                    os.remove(config_file)
+                
+                # 显示重启提示
+                QMessageBox.information(self, "重置成功", "设置已重置，软件将自动重启...")
+                
+                # 重启软件
+                python = sys.executable
+                os.execl(python, python, *sys.argv)
+            except Exception as e:
+                QMessageBox.critical(self, "重置失败", f"重置设置时出错: {str(e)}")
+                Log.error(f"重置设置时出错: {e}")
+    
+    def load_saved_settings(self):
+        """从文件加载保存的设置"""
+        try:
+            import json
+            import os
+            from utils import resource_path
+            
+            # 配置文件路径
+            config_file = os.path.join(resource_path('.meta'), 'settings.json')
+            
+            if os.path.exists(config_file):
+                # 检查文件是否为空
+                if os.path.getsize(config_file) == 0:
+                    # 空文件，删除并重新创建默认设置
+                    os.remove(config_file)
+                    return
+                
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                
+                # 应用保存的设置
+                if 'download_threads' in settings:
+                    self.download_threads = settings['download_threads']
+                    self.threads_input.setText(str(self.download_threads))
+                
+                if 'image_rename_mode' in settings:
+                    self.image_rename_mode = settings['image_rename_mode']
+                    if self.image_rename_mode == 'asc':
+                        self.rename_radio1.setChecked(True)
+                    else:
+                        self.rename_radio2.setChecked(True)
+                
+                if 'image_file_prefix' in settings:
+                    self.image_file_prefix = settings['image_file_prefix']
+                    self.file_prefix_input.setText(self.image_file_prefix)
+                
+                if 'yuque_cdn_domain' in settings:
+                    self.yuque_cdn_domain = settings['yuque_cdn_domain']
+                    self.cdn_input.setText(self.yuque_cdn_domain)
+        except Exception as e:
+            Log.error(f"加载保存的设置时出错: {e}")
+            # 如果加载失败，尝试删除损坏的配置文件
+            try:
+                import os
+                from utils import resource_path
+                config_file = os.path.join(resource_path('.meta'), 'settings.json')
+                if os.path.exists(config_file):
+                    os.remove(config_file)
+            except:
+                pass
+    
     def toggle_debug_mode(self, state):
         """处理调试模式切换"""
         debug_enabled = state == Qt.Checked
