@@ -12,7 +12,7 @@ from utils import static_resource_path, StdoutRedirector, QPasswordLineEdit
 
 from .login_manager import LoginManagerMixin
 from .book_manager import BookManagerMixin
-from .article_manager import ArticleManagerMixin, ArticleListWidget
+from .article_manager import ArticleManagerMixin
 from .export_manager import ExportManagerMixin
 from .log_manager import LogManagerMixin
 from .settings_manager import SettingsManagerMixin
@@ -220,7 +220,6 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
             height: 24px;
             font-size: 13px;
             font-weight: bold;
-            color: white;
         }
         
         QProgressBar::chunk {
@@ -718,7 +717,8 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         center_layout.addLayout(article_search_layout)
 
         # 文章列表
-        self.article_list = ArticleListWidget()
+        self.article_list = QListWidget()
+        self.article_list.setSelectionMode(QListWidget.MultiSelection)
         self.article_list.itemSelectionChanged.connect(self.update_article_selection)
         center_layout.addWidget(self.article_list)
 
@@ -975,7 +975,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.progress_bar.setStyleSheet("""
             QProgressBar {
                 text-align: center;
-                color: white;
+                color: #495057;
                 font-weight: bold;
                 font-size: 13px;
                 background-color: #f8f9fa;

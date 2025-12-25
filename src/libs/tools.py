@@ -215,7 +215,7 @@ def get_docs_cache(namespace: str) -> Optional[List[dict]]:
 
 
 def clean_cache() -> bool:
-    """清理本地缓存，保留cookies.json、user_info.json和settings.json"""
+    """清理本地缓存，保留cookies.json和user_info.json"""
     try:
         import os
         import shutil
@@ -223,7 +223,7 @@ def clean_cache() -> bool:
         meta_dir = GLOBAL_CONFIG.meta_dir
         if os.path.exists(meta_dir):
             # 需要保留的文件
-            preserve_files = ['cookies.json', 'user_info.json', 'settings.json']
+            preserve_files = ['cookies.json', 'user_info.json']
 
             # 遍历.meta目录下的所有文件和文件夹
             for filename in os.listdir(meta_dir):
