@@ -152,6 +152,24 @@ class ThreadedImageDownloader:
         filename = os.path.basename(md_file_path)
         parent_dir = os.path.dirname(md_file_path)
 
+        # 先解析文件，检查是否有图片URL
+        has_images = False
+        try:
+            with open(md_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f.readlines():
+                    line = re.sub(r'png#(.*)+', 'png)', line)
+                    image_urls = re.findall(r'https?://[^\s<>"\)\]]+\.(?:png|jpeg|jpg)', line, re.IGNORECASE)
+                    if image_urls:
+                        has_images = True
+                        break
+        except Exception as e:
+            Log.error(f'读取文件失败: {md_file_path}, 错误: {str(e)}')
+            return 0
+
+        if not has_images:
+            Log.info(f'文档 {filename} 不包含图片，跳过处理')
+            return 0
+
         # 检查文件是否已经在同名目录中
         folder_name = os.path.splitext(filename)[0]
         parent_folder_name = os.path.basename(parent_dir)
