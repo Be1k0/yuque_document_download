@@ -87,6 +87,7 @@ class MutualAnswer:
     line_break: bool
     download_range: str = "all"  # 'all' - 所有文章, 'recent' - 最近文章, 'custom' - 自定义范围, 'selected' - 选择特定文章
     selected_docs: Dict[str, List[str]] = field(default_factory=dict)  # 知识库名称 -> 选中的文章ID列表
+    progress_callback: Optional[callable] = None  # 进度回调函数
 
 
 @dataclass

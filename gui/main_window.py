@@ -69,6 +69,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.image_rename_mode = 'asc'  # 图片重命名模式
         self.image_file_prefix = 'image-'  # 图片文件前缀
         self.yuque_cdn_domain = 'cdn.nlark.com'  # 语雀CDN域名
+        self.enable_debug = False  # 调试模式
 
         # 应用样式表
         self.apply_stylesheet()
@@ -737,7 +738,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.select_all_articles_btn.clicked.connect(self.select_all_articles)
         article_buttons_layout.addWidget(self.select_all_articles_btn)
 
-        self.deselect_all_articles_btn = QPushButton("取消全选")
+        self.deselect_all_articles_btn = QPushButton("取消选择")
         self.deselect_all_articles_btn.setMinimumHeight(30)  # 优化按钮高度
         self.deselect_all_articles_btn.setMaximumHeight(34)  # 优化最大高度
         self.deselect_all_articles_btn.setStyleSheet("""
@@ -975,7 +976,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.progress_bar.setStyleSheet("""
             QProgressBar {
                 text-align: center;
-                color: white;
+                color: #212529;
                 font-weight: bold;
                 font-size: 13px;
                 background-color: #f8f9fa;

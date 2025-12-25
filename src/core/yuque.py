@@ -437,6 +437,7 @@ class YuqueApi:
                             "uuid": item.get("uuid", ""),
                             "type": item.get("type", "doc"),
                             "parent_uuid": item.get("parent_uuid", ""),
+                            "level": item.get("level", 0),
                         }
                         doc_list.append(doc)
 
@@ -534,7 +535,6 @@ class YuqueApi:
                 if _has_debug_logger:
                     preview = resp[:200] + "..." if len(resp) > 200 else resp
                     DebugLogger.log_info(f"Markdown内容长度: {len(resp)}")
-                    DebugLogger.log_data("Markdown内容预览", preview)
 
                 if resp and len(resp) > 10:  # 内容至少有一定长度才算有效
                     # 对内容进行后处理
@@ -597,7 +597,7 @@ class YuqueApi:
                     DebugLogger.log_error(f"API路径获取异常: {str(e)}")
 
             Log.error(f"无法导出文档 {namespace}/{doc_identifier} 的Markdown内容")
-            return "无法获取文档内容，可能需要登录后才能访问或文档已被删除。"
+            return "无法获取文档内容，可能文档类型不支持或文档已被删除或文档内容为空。"
 
         except Exception as e:
             Log.error(f"导出Markdown失败: {str(e)}")
