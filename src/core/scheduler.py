@@ -162,6 +162,18 @@ class Scheduler:
             Log.info(f"知识库 {book.name} 共有 {len(docs)} 个文档")
             Log.info(answer.download_range)
 
+            # 构建层级映射表：uuid -> (title, level, type, parent_uuid)
+            level_map = {}
+            for doc in docs:
+                uuid = doc.get('uuid', '')
+                if uuid:
+                    level_map[uuid] = {
+                        'title': doc.get('title', ''),
+                        'level': doc.get('level', 0),
+                        'type': doc.get('type', 'DOC'),
+                        'parent_uuid': doc.get('parent_uuid', '')
+                    }
+
             # 根据下载范围处理文档列表
             filtered_docs = docs
             if answer.download_range == "recent" and GLOBAL_CONFIG.article_limit > 0:
@@ -207,10 +219,14 @@ class Scheduler:
                         Log.info(f"跳过非文档条目: {doc_title} (类型: {doc_type})")
                         continue
 
+                    # 调用进度回调，显示正在下载的文章
+                    if answer.progress_callback:
+                        answer.progress_callback(f"正在下载文章 ({i}/{len(filtered_docs)}): {doc_title}")
+
                     Log.info(f"下载文档 ({i}/{len(filtered_docs)}): {doc_title}")
 
                     # 直接传递完整的doc对象
-                    await Scheduler._download_doc(namespace, doc, book_dir, answer)
+                    await Scheduler._download_doc(namespace, doc, book_dir, answer, level_map)
 
                     # 添加延迟避免请求过快
                     await asyncio.sleep(GLOBAL_CONFIG.duration / 1000)
@@ -226,21 +242,33 @@ class Scheduler:
             sys.exit(1)
 
     @staticmethod
-    async def _download_doc(namespace: str, doc: Dict[str, Any], book_dir: str, answer: MutualAnswer) -> None:
+    async def _download_doc(namespace: str, doc: Dict[str, Any], book_dir: str, answer: MutualAnswer, level_map: Dict[str, Dict]) -> None:
         """下载单个文档"""
         try:
             doc_title = doc.get('title', 'Untitled')
             doc_slug = doc.get('slug', '')
             doc_url = doc.get('url', '')  # 获取URL
+            doc_uuid = doc.get('uuid', '')
+            parent_uuid = doc.get('parent_uuid', '')
 
             # 如果URL为空，尝试使用slug作为备选
             if not doc_url:
                 doc_url = doc_slug
                 Log.info(f"文档没有URL，使用slug作为URL: {doc_slug}")
 
+            # 根据层级结构构建目录路径
+            target_dir = book_dir
+            if parent_uuid and parent_uuid in level_map:
+                # 递归构建父级路径
+                path_parts = Scheduler._build_doc_path(parent_uuid, level_map)
+                if path_parts:
+                    target_dir = os.path.join(book_dir, *path_parts)
+                    ensure_dir_exists(target_dir)
+                    Log.debug(f"文档层级路径: {path_parts}")
+
             # 生成文件名
             filename = format_filename(doc_title) + '.md'
-            file_path = os.path.join(book_dir, filename)
+            file_path = os.path.join(target_dir, filename)
 
             # 检查是否跳过已存在的文件
             # 不仅检查原始路径，还要检查图片下载后可能移动到的子目录
@@ -253,7 +281,7 @@ class Scheduler:
                 # 检查图片下载后可能移动到的子目录中的文件
                 # 图片下载功能会将文章移动到以文章名命名的子目录中
                 folder_name = os.path.splitext(filename)[0]  # 去掉.md扩展名
-                subdir_file_path = os.path.join(book_dir, folder_name, filename)
+                subdir_file_path = os.path.join(target_dir, folder_name, filename)
                 if os.path.exists(subdir_file_path):
                     Log.info(f"跳过已存在的文件（在子目录中）: {folder_name}/{filename}")
                     return
@@ -274,10 +302,35 @@ class Scheduler:
             f = File()
             f.write(file_path, markdown_content)
 
-            Log.success(f"文档保存成功: {filename}")
+            # 计算相对路径用于日志显示
+            rel_path = os.path.relpath(file_path, book_dir)
+            Log.success(f"文档保存成功: {rel_path}")
 
         except Exception as e:
             Log.error(f"下载文档失败: {str(e)}")
+
+    @staticmethod
+    def _build_doc_path(uuid: str, level_map: Dict[str, Dict]) -> list:
+        """递归构建文档的层级路径"""
+        if uuid not in level_map:
+            return []
+
+        doc_info = level_map[uuid]
+        doc_type = doc_info.get('type', 'DOC')
+
+        # 处理TITLE和DOC类型的父级
+        # DOC类型的文档也可以作为父级（比如"动态场景生成"有子文档"开发文档"）
+        if doc_type.upper() not in ['TITLE', 'DOC']:
+            return []
+
+        title = format_filename(doc_info['title'])
+        parent_uuid = level_map.get(uuid, {}).get('parent_uuid', '')
+
+        # 递归获取父级路径
+        parent_path = Scheduler._build_doc_path(parent_uuid, level_map)
+
+        # 将当前文档添加到路径末尾
+        return parent_path + [title]
 
     @staticmethod
     def clean_cache() -> bool:
