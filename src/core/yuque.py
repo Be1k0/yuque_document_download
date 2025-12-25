@@ -227,13 +227,9 @@ class YuqueApi:
                 Log.error(f"获取页面内容失败: {str(e)}")
                 return None
 
-            # 尝试不同的正则表达式模式
+            # 正则表达式匹配
             patterns = [
-                r'decodeURIComponent\("([^"]+)"\)',
-                r'window\.bookData\s*=\s*({.*?})\s*;',
-                r'JSON\.parse\(decodeURIComponent\("([^"]+)"\)\)',
-                r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
-                r'var\s+bookInfo\s*=\s*({.*?})\s*;'
+                r'decodeURIComponent\("([^"]+)"\)'
             ]
 
             data = None
@@ -396,6 +392,7 @@ class YuqueApi:
                         "uuid": item.get("uuid", ""),
                         "type": item.get("type", "doc"),
                         "parent_uuid": item.get("parent_uuid", ""),
+                        "level": item.get("level", 0),
                     }
 
                     if _has_debug_logger:
