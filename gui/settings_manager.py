@@ -109,7 +109,7 @@ class SettingsManagerMixin:
 
         self.enable_debug_checkbox = QCheckBox("调试模式")
         self.enable_debug_checkbox.setToolTip("记录详细日志到文件")
-        self.enable_debug_checkbox.setChecked(False)
+        self.enable_debug_checkbox.setChecked(self.enable_debug)
         self.enable_debug_checkbox.stateChanged.connect(self.toggle_debug_mode)
         debug_layout.addWidget(self.enable_debug_checkbox)
 
@@ -225,12 +225,23 @@ class SettingsManagerMixin:
                 'download_threads': self.download_threads,
                 'image_rename_mode': self.image_rename_mode,
                 'image_file_prefix': self.image_file_prefix,
-                'yuque_cdn_domain': self.yuque_cdn_domain
+                'yuque_cdn_domain': self.yuque_cdn_domain,
+                'enable_debug': self.enable_debug
             }
             
             # 保存到文件
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, ensure_ascii=False, indent=2)
+            
+            # 应用调试模式设置
+            Log.set_debug_mode(self.enable_debug)
+            
+            if self.enable_debug:
+                try:
+                    from src.libs.debug_logger import DebugLogger
+                    DebugLogger.initialize()
+                except ImportError as e:
+                    self.log_handler.emit_log(f"无法导入调试日志模块: {str(e)}")
             
             QMessageBox.information(self, "保存成功", "设置已成功保存！")
         except Exception as e:
@@ -304,6 +315,10 @@ class SettingsManagerMixin:
                 if 'yuque_cdn_domain' in settings:
                     self.yuque_cdn_domain = settings['yuque_cdn_domain']
                     self.cdn_input.setText(self.yuque_cdn_domain)
+                
+                if 'enable_debug' in settings:
+                    self.enable_debug = settings['enable_debug']
+                    self.enable_debug_checkbox.setChecked(self.enable_debug)
         except Exception as e:
             Log.error(f"加载保存的设置时出错: {e}")
             # 如果加载失败，尝试删除损坏的配置文件
@@ -318,19 +333,7 @@ class SettingsManagerMixin:
     
     def toggle_debug_mode(self, state):
         """处理调试模式切换"""
-        debug_enabled = state == Qt.Checked
-        Log.set_debug_mode(debug_enabled)
-
-        if debug_enabled:
-            try:
-                from src.libs.debug_logger import DebugLogger
-                # 确保调试日志记录器已初始化
-                DebugLogger.initialize()
-                self.log_handler.emit_log("调试模式已启用，详细日志将被记录到文件")
-            except ImportError as e:
-                self.log_handler.emit_log(f"无法导入调试日志模块: {str(e)}")
-        else:
-            self.log_handler.emit_log("调试模式已关闭")
+        self.enable_debug = state == Qt.Checked
 
     def create_about_page(self):
         """创建关于页面"""
