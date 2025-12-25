@@ -4,14 +4,165 @@ from PyQt5.QtWidgets import (
     QComboBox, QPushButton, QLineEdit, QListWidget, QListWidgetItem, 
     QMessageBox, QTabWidget
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtGui import QColor, QFont
-
 from src.core.yuque import YuqueApi
 from src.libs.tools import get_docs_cache, save_docs_cache
 from src.libs.constants import MutualAnswer
 from src.libs.log import Log
 from utils import AsyncWorker
+from src.libs.debug_logger import DebugLogger
+
+class ArticleListWidget(QListWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSelectionMode(QListWidget.MultiSelection)
+        self.last_clicked_item = None
+        self.last_click_time = 0
+        self.double_click_threshold = 200
+        self.click_timer = None
+        self.pending_click_item = None
+
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.pos())
+        if item:
+            article_data = item.data(Qt.UserRole + 1)
+            if article_data and isinstance(article_data, dict):
+                item_type = article_data.get('type', 'DOC').upper()
+                
+                if item_type == 'TITLE':
+                    from PyQt5.QtCore import QTime, QTimer
+                    current_time = QTime.currentTime().msecsSinceStartOfDay()
+                    
+                    if (self.last_clicked_item == item and 
+                        current_time - self.last_click_time < self.double_click_threshold):
+                        # 双击：折叠/展开
+                        self.toggle_title_children(item)
+                        self.last_clicked_item = None
+                        self.last_click_time = 0
+                        
+                        # 取消待处理的单击操作
+                        if self.click_timer:
+                            self.click_timer.stop()
+                            self.click_timer = None
+                        self.pending_click_item = None
+                        return
+                    else:
+                        # 记录这次点击，等待第二次点击或超时
+                        self.last_clicked_item = item
+                        self.last_click_time = current_time
+                        self.pending_click_item = item
+                        
+                        # 设置定时器，如果超时则执行单击操作
+                        if self.click_timer:
+                            self.click_timer.stop()
+                        
+                        self.click_timer = QTimer()
+                        self.click_timer.setSingleShot(True)
+                        self.click_timer.timeout.connect(self._handle_single_click)
+                        self.click_timer.start(self.double_click_threshold)
+                        
+                        # 不调用父类的 mousePressEvent，避免立即选中
+                        return
+        
+        super().mousePressEvent(event)
+
+    def _handle_single_click(self):
+        """处理单击操作"""
+        if self.pending_click_item:
+            self.select_title_children(self.pending_click_item)
+            self.pending_click_item = None
+        self.click_timer = None
+
+    def toggle_title_children(self, title_item):
+        title_data = title_item.data(Qt.UserRole + 1)
+        if not title_data or not isinstance(title_data, dict):
+            return
+        
+        title_uuid = title_data.get('uuid')
+        if not title_uuid:
+            return
+        
+        current_index = self.row(title_item)
+        if current_index < 0:
+            return
+        
+        # 获取标题的缩进级别
+        title_indent = title_item.data(Qt.UserRole + 2)
+        if title_indent is None:
+            title_indent = 0
+        
+        # 检查是否有后代项被隐藏
+        children_hidden = False
+        for i in range(current_index + 1, self.count()):
+            child_item = self.item(i)
+            child_data = child_item.data(Qt.UserRole + 1)
+            if child_data and isinstance(child_data, dict):
+                child_type = child_data.get('type', 'DOC').upper()
+                child_indent = child_item.data(Qt.UserRole + 2)
+                
+                if child_type == 'TITLE':
+                    # 遇到同级或更高级的标题，停止检查
+                    if child_indent is not None and child_indent <= title_indent:
+                        break
+                
+                # 检查所有后代项
+                if child_indent is not None and child_indent > title_indent:
+                    if child_item.isHidden():
+                        children_hidden = True
+                        break
+        
+        # 切换所有后代项的可见性
+        for i in range(current_index + 1, self.count()):
+            child_item = self.item(i)
+            child_data = child_item.data(Qt.UserRole + 1)
+            if child_data and isinstance(child_data, dict):
+                child_type = child_data.get('type', 'DOC').upper()
+                child_indent = child_item.data(Qt.UserRole + 2)
+                
+                if child_type == 'TITLE':
+                    # 遇到同级或更高级的标题，停止切换
+                    if child_indent is not None and child_indent <= title_indent:
+                        break
+                
+                # 切换所有后代项
+                if child_indent is not None and child_indent > title_indent:
+                    child_item.setHidden(not children_hidden)
+
+    def select_title_children(self, title_item):
+        title_data = title_item.data(Qt.UserRole + 1)
+        if not title_data or not isinstance(title_data, dict):
+            return
+        
+        title_uuid = title_data.get('uuid')
+        if not title_uuid:
+            return
+        
+        current_index = self.row(title_item)
+        if current_index < 0:
+            return
+        
+        # 获取标题的缩进级别
+        title_indent = title_item.data(Qt.UserRole + 2)
+        if title_indent is None:
+            title_indent = 0
+        
+        # 选中所有后代子项（缩进级别大于标题的项）
+        for i in range(current_index + 1, self.count()):
+            child_item = self.item(i)
+            child_data = child_item.data(Qt.UserRole + 1)
+            if child_data and isinstance(child_data, dict):
+                child_type = child_data.get('type', 'DOC').upper()
+                child_indent = child_item.data(Qt.UserRole + 2)
+                
+                if child_type == 'TITLE':
+                    # 遇到同级或更高级的标题，停止选择
+                    if child_indent is not None and child_indent <= title_indent:
+                        break
+                
+                # 选中所有后代子项（缩进级别大于标题）
+                if child_indent is not None and child_indent > title_indent:
+                    child_item.setSelected(True)
 
 # 文章选择对话框
 class ArticleSelectionDialog(QDialog):
@@ -68,8 +219,7 @@ class ArticleSelectionDialog(QDialog):
         main_layout.addLayout(article_search_layout)
 
         # 文章列表
-        self.article_list = QListWidget()
-        self.article_list.setSelectionMode(QListWidget.MultiSelection)
+        self.article_list = ArticleListWidget()
         self.article_list.itemSelectionChanged.connect(self.update_article_selection)
         main_layout.addWidget(self.article_list)
 
@@ -236,7 +386,7 @@ class ArticleSelectionDialog(QDialog):
         self.load_articles_worker.start()
 
     def display_articles(self, articles, book_name):
-        """显示文章列表"""
+        """显示文章列表，支持层级显示"""
         try:
             self.article_list.clear()
 
@@ -256,30 +406,145 @@ class ArticleSelectionDialog(QDialog):
                 self.article_list.addItem(empty_item)
                 return
 
-            # 按更新时间排序文章
-            sorted_articles = articles
-            if len(articles) > 0 and isinstance(articles[0], dict):
-                 if all('updated_at' in doc for doc in articles):
-                    sorted_articles = sorted(articles, key=lambda x: x.get('updated_at', ''), reverse=True)
-
-            for article in sorted_articles:
-                if isinstance(article, dict):
-                    title = article.get('title', 'Untitled')
-                    article_id = article.get('id', '')
-                else:
-                    title = getattr(article, 'title', 'Untitled')
-                    article_id = getattr(article, 'id', '')
+            # 处理层级关系
+            try:
+                # 确保articles是字典列表
+                if not isinstance(articles[0], dict):
+                    # 如果是对象列表，转换为字典列表
+                    articles = [{k: v for k, v in obj.__dict__.items() if not k.startswith('_')} for obj in articles]
                 
-                item = QListWidgetItem(title)
-                item.setData(Qt.UserRole, article_id)
-                item.setData(Qt.UserRole + 1, article)
+                # 1. 首先，构建UUID到文章的映射
+                uuid_to_article = {}
+                for article in articles:
+                    uuid = article.get('uuid')
+                    if uuid:
+                        uuid_to_article[uuid] = article
+                
+                # 2. 构建层级结构
+                def build_hierarchy(items):
+                    # 初始化所有项目的children列表
+                    for item in items:
+                        item['children'] = []
+                    
+                    # 1. 首先处理所有子项目，将它们添加到父项目的children中
+                    for item in items:
+                        parent_uuid = item.get('parent_uuid')
+                        if parent_uuid and parent_uuid in uuid_to_article:
+                            parent = uuid_to_article[parent_uuid]
+                            parent['children'].append(item)
+                    
+                    # 2. 找出所有根级项目（level=0）
+                    root_items = [item for item in items if item.get('level') == 0]
+                    
+                    # 3. 按标题优先、再按标题名称排序
+                    root_items.sort(key=lambda x: ((x.get('type', 'DOC') != 'TITLE'), x.get('title', '')))
+                    
+                    # 4. 对子项目也进行类似排序
+                    def sort_children_recursive(items):
+                        for item in items:
+                            if item['children']:
+                                # 对子项目按标题优先、再按标题名称排序
+                                item['children'].sort(key=lambda x: ((x.get('type', 'DOC') != 'TITLE'), x.get('title', '')))
+                                # 递归处理更深层级
+                                sort_children_recursive(item['children'])
+                    
+                    # 递归排序子项目
+                    sort_children_recursive(root_items)
+                    
+                    return root_items
+                
+                # 构建层级结构
+                hierarchy = build_hierarchy(articles)
+                
+                # 3. 递归显示层级结构
+                def add_items_recursive(items, indent_level=0):
+                    for item in items:
+                        title = item.get('title', 'Untitled')
+                        item_type = item.get('type', 'DOC').upper()
+                        
+                        # 创建列表项
+                        # 添加缩进
+                        indent = '  ' * indent_level
+                        if item_type == 'TITLE':
+                            display_title = f"{indent}📁 {title}" 
+                        else:
+                            display_title = f"{indent}  {title}"
+                        
+                        list_item = QListWidgetItem(display_title)
+                        
+                        # 设置样式
+                        font = QFont()
+                        if item_type == 'TITLE':
+                            # 标题样式
+                            font.setBold(True)
+                            list_item.setForeground(QColor("#0d6efd"))
+                        else:
+                            # 文档样式
+                            list_item.setForeground(QColor("#333333"))
+                        list_item.setFont(font)
+                        
+                        # 存储文章ID和其他必要信息
+                        list_item.setData(Qt.UserRole, item.get('id', ''))
+                        list_item.setData(Qt.UserRole + 1, item)  # 存储完整的文章对象
+                        list_item.setData(Qt.UserRole + 2, indent_level)  # 存储缩进级别
+                        
+                        # 检查是否已经选择过该文章
+                        if self.current_book_name in self.selected_articles and \
+                                item.get('id', '') in self.selected_articles[self.current_book_name]:
+                            list_item.setSelected(True)
+                        
+                        self.article_list.addItem(list_item)
+                        
+                        # 递归添加子项
+                        if 'children' in item and item['children']:
+                            add_items_recursive(item['children'], indent_level + 1)
+                
+                # 添加层级结构到列表
+                add_items_recursive(hierarchy)
+                
+            except Exception as hierarchy_error:
+                # 如果层级处理过程中出错，显示原始列表
+                self.article_list.clear()
 
-                # 检查是否已经选择过该文章
-                if self.current_book_name in self.selected_articles and \
-                        article_id in self.selected_articles[self.current_book_name]:
-                    item.setSelected(True)
+                # 简单显示文章标题，区分标题和文档
+                for article in articles:
+                    try:
+                        if isinstance(article, dict):
+                            title = article.get('title', 'Untitled')
+                            item_type = article.get('type', 'DOC').upper()
+                            article_id = article.get('id', '')
+                        else:
+                            title = getattr(article, 'title', 'Untitled')
+                            item_type = getattr(article, 'type', 'DOC').upper()
+                            article_id = getattr(article, 'id', '')
+                        
+                        # 区分标题和文档
+                        if item_type == 'TITLE':
+                            display_title = f"📁 {title}"  # 标题使用文件夹图标
+                        else:
+                            display_title = f"📄 {title}"  # 文档使用文件图标
+                        
+                        item = QListWidgetItem(display_title)
+                        
+                        # 设置样式
+                        font = QFont()
+                        if item_type == 'TITLE':
+                            font.setBold(True)
+                            item.setForeground(QColor("#0d6efd"))
+                        item.setFont(font)
+                        
+                        item.setData(Qt.UserRole, article_id)
+                        item.setData(Qt.UserRole + 1, article)
 
-                self.article_list.addItem(item)
+                        # 检查是否已经选择过该文章
+                        if self.current_book_name in self.selected_articles and \
+                                article_id in self.selected_articles[self.current_book_name]:
+                            item.setSelected(True)
+
+                        self.article_list.addItem(item)
+                    except:
+                        # 跳过无法处理的文章
+                        continue
 
             # 更新状态
             self.status_label.setText(f"知识库 {book_name} 共有 {len(articles)} 篇文章")
@@ -427,8 +692,7 @@ class ArticleManagerMixin:
             if selected_articles:
                 # 计算总选择数量
                 total_articles = sum(len(ids) for book, ids in selected_articles.items())
-                self.log_handler.emit_log(f"已选择 {total_articles} 篇文章进行下载")
-                # self.article_select_status.setText(f"已选择 {total_articles} 篇文章") # This might not exist in main window if not created
+                DebugLogger.log_debug(f"已选择 {total_articles} 篇文章进行下载")
 
                 # 存储选择的文章ID
                 if not hasattr(self, '_current_answer'):
@@ -598,7 +862,7 @@ class ArticleManagerMixin:
         return {"error": "all_retries_failed", "message": "多次尝试获取文档列表均失败"}
 
     def display_articles(self, articles, book_name):
-        """显示文章列表"""
+        """显示文章列表，支持层级显示"""
         try:
             self.article_list.clear()
 
@@ -637,94 +901,151 @@ class ArticleManagerMixin:
                     self.log_handler.emit_log(f"知识库 {book_name} 没有文章")
                 return
 
-            # 按更新时间排序文章（如果有更新时间字段）
+            # 处理层级关系
             try:
-                sorted_articles = articles
-                if len(articles) > 0 and isinstance(articles[0], dict):
-                    # API返回的是字典列表
-                    if all('updated_at' in doc for doc in articles):
-                        sorted_articles = sorted(articles, key=lambda x: x.get('updated_at', ''), reverse=True)
-
-                    for article in sorted_articles:
-                        title = article.get('title', 'Untitled')
-                        updated_at = article.get('updated_at', '')
-
+                # 确保articles是字典列表
+                if not isinstance(articles[0], dict):
+                    # 如果是对象列表，转换为字典列表
+                    articles = [{k: v for k, v in obj.__dict__.items() if not k.startswith('_')} for obj in articles]
+                
+                # 1. 首先，构建UUID到文章的映射
+                uuid_to_article = {}
+                for article in articles:
+                    uuid = article.get('uuid')
+                    if uuid:
+                        uuid_to_article[uuid] = article
+                
+                # 2. 构建层级结构
+                def build_hierarchy(items):
+                    # 初始化所有项目的children列表
+                    for item in items:
+                        item['children'] = []
+                    
+                    # 1. 首先处理所有子项目，将它们添加到父项目的children中
+                    for item in items:
+                        parent_uuid = item.get('parent_uuid')
+                        if parent_uuid and parent_uuid in uuid_to_article:
+                            parent = uuid_to_article[parent_uuid]
+                            parent['children'].append(item)
+                    
+                    # 2. 找出所有根级项目（level=0）
+                    root_items = [item for item in items if item.get('level') == 0]
+                    
+                    # 3. 按标题优先、再按标题名称排序
+                    root_items.sort(key=lambda x: ((x.get('type', 'DOC') != 'TITLE'), x.get('title', '')))
+                    
+                    # 4. 对子项目也进行类似排序
+                    def sort_children_recursive(items):
+                        for item in items:
+                            if item['children']:
+                                # 对子项目按标题优先、再按标题名称排序
+                                item['children'].sort(key=lambda x: ((x.get('type', 'DOC') != 'TITLE'), x.get('title', '')))
+                                # 递归处理更深层级
+                                sort_children_recursive(item['children'])
+                    
+                    # 递归排序子项目
+                    sort_children_recursive(root_items)
+                    
+                    return root_items
+                
+                # 构建层级结构
+                hierarchy = build_hierarchy(articles)
+                
+                # 3. 递归显示层级结构
+                def add_items_recursive(items, indent_level=0):
+                    for item in items:
+                        title = item.get('title', 'Untitled')
+                        item_type = item.get('type', 'DOC').upper()
+                        updated_at = item.get('updated_at', '')
+                        
                         # 创建列表项
-                        item = QListWidgetItem(title)
-
+                        # 添加缩进
+                        indent = '  ' * indent_level
+                        if item_type == 'TITLE':
+                            display_title = f"{indent}📁 {title}"  # 标题使用文件夹图标
+                        else:
+                            display_title = f"{indent} {title}"  # 文档使用文件图标
+                        
+                        list_item = QListWidgetItem(display_title)
+                        
+                        # 设置样式
+                        font = QFont()
+                        if item_type == 'TITLE':
+                            # 标题样式
+                            font.setBold(True)
+                            list_item.setForeground(QColor("#0d6efd"))
+                        else:
+                            # 文档样式
+                            list_item.setForeground(QColor("#333333"))
+                        list_item.setFont(font)
+                        
                         # 设置提示文本
                         if updated_at:
                             try:
                                 # 格式化更新时间为可读形式
                                 updated_date = updated_at.split('T')[0]  # 简单处理，仅显示日期部分
-                                item.setToolTip(f"标题: {title}\n更新时间: {updated_date}")
+                                list_item.setToolTip(f"标题: {title}\n类型: {item_type}\n更新时间: {updated_date}")
                             except:
-                                item.setToolTip(f"标题: {title}")
+                                list_item.setToolTip(f"标题: {title}\n类型: {item_type}")
                         else:
-                            item.setToolTip(f"标题: {title}")
-
+                            list_item.setToolTip(f"标题: {title}\n类型: {item_type}")
+                        
                         # 存储文章ID和其他必要信息
-                        item.setData(Qt.UserRole, article.get('id', ''))
-                        item.setData(Qt.UserRole + 1, article)  # 存储完整的文章对象
-
+                        list_item.setData(Qt.UserRole, item.get('id', ''))
+                        list_item.setData(Qt.UserRole + 1, item)  # 存储完整的文章对象
+                        list_item.setData(Qt.UserRole + 2, indent_level)  # 存储缩进级别
+                        
                         # 检查是否已经选择过该文章
                         if hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs') and \
                                 book_name in self._current_answer.selected_docs and \
-                                article.get('id', '') in self._current_answer.selected_docs[book_name]:
-                            item.setSelected(True)
-
-                        self.article_list.addItem(item)
-                else:
-                    # API返回的是对象列表
-                    if len(articles) > 0 and hasattr(articles[0], 'updated_at'):
-                        sorted_articles = sorted(articles, key=lambda x: getattr(x, 'updated_at', ''), reverse=True)
-
-                    for article in sorted_articles:
-                        title = getattr(article, 'title', 'Untitled')
-                        updated_at = getattr(article, 'updated_at', '')
-
-                        # 创建列表项
-                        item = QListWidgetItem(title)
-
-                        # 设置提示文本
-                        if updated_at:
-                            try:
-                                # 格式化更新时间为可读形式
-                                updated_date = updated_at.split('T')[0]  # 简单处理，仅显示日期部分
-                                item.setToolTip(f"标题: {title}\n更新时间: {updated_date}")
-                            except:
-                                item.setToolTip(f"标题: {title}")
-                        else:
-                            item.setToolTip(f"标题: {title}")
-
-                        # 存储文章ID和其他必要信息
-                        item.setData(Qt.UserRole, getattr(article, 'id', ''))
-                        item.setData(Qt.UserRole + 1, article)  # 存储完整的文章对象
-
-                        # 检查是否已经选择过该文章
-                        if hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs') and \
-                                book_name in self._current_answer.selected_docs and \
-                                getattr(article, 'id', '') in self._current_answer.selected_docs[book_name]:
-                            item.setSelected(True)
-
-                        self.article_list.addItem(item)
-            except Exception as sorting_error:
-                # 如果排序或处理文章过程中出错，显示原始列表
+                                item.get('id', '') in self._current_answer.selected_docs[book_name]:
+                            list_item.setSelected(True)
+                        
+                        self.article_list.addItem(list_item)
+                        
+                        # 递归添加子项
+                        if 'children' in item and item['children']:
+                            add_items_recursive(item['children'], indent_level + 1)
+                
+                # 添加层级结构到列表
+                add_items_recursive(hierarchy)
+                
+            except Exception as hierarchy_error:
+                # 如果层级处理过程中出错，显示原始列表
                 if hasattr(self, 'log_handler'):
-                    self.log_handler.emit_log(f"处理文章列表时出错: {str(sorting_error)}，显示未排序列表")
+                    self.log_handler.emit_log(f"处理文章层级时出错: {str(hierarchy_error)}，显示未分级列表")
                 self.article_list.clear()
 
-                # 简单显示文章标题
+                # 简单显示文章标题，区分标题和文档
                 for article in articles:
                     try:
                         if isinstance(article, dict):
                             title = article.get('title', 'Untitled')
-                            item = QListWidgetItem(title)
-                            item.setData(Qt.UserRole, article.get('id', ''))
+                            item_type = article.get('type', 'DOC').upper()
                         else:
                             title = getattr(article, 'title', 'Untitled')
-                            item = QListWidgetItem(title)
+                            item_type = getattr(article, 'type', 'DOC').upper()
+                        
+                        # 区分标题和文档
+                        if item_type == 'TITLE':
+                            display_title = f"📁 {title}"  # 标题使用文件夹图标
+                        else:
+                            display_title = f"📄 {title}"  # 文档使用文件图标
+                        
+                        item = QListWidgetItem(display_title)
+                        
+                        # 设置样式
+                        font = QFont()
+                        if item_type == 'TITLE':
+                            font.setBold(True)
+                            item.setForeground(QColor("#0d6efd"))
+                        item.setFont(font)
+                        
+                        if isinstance(article, dict):
+                            item.setData(Qt.UserRole, article.get('id', ''))
+                        else:
                             item.setData(Qt.UserRole, getattr(article, 'id', ''))
+                        
                         self.article_list.addItem(item)
                     except:
                         # 跳过无法处理的文章
@@ -819,12 +1140,12 @@ class ArticleManagerMixin:
                 if selected_ids:
                     self._current_answer.selected_docs[self.current_book_name] = selected_ids
                     if hasattr(self, 'log_handler'):
-                        self.log_handler.emit_log(f"已选择 {len(selected_ids)} 篇 {self.current_book_name} 的文章")
+                        DebugLogger.log_debug(f"已选择 {len(selected_ids)} 篇 {self.current_book_name} 的文章")
                 elif self.current_book_name in self._current_answer.selected_docs:
                     # 如果没有选中任何文章，从已选字典中删除该知识库
                     del self._current_answer.selected_docs[self.current_book_name]
                     if hasattr(self, 'log_handler'):
-                        self.log_handler.emit_log(f"已清除 {self.current_book_name} 的所有选择")
+                        DebugLogger.log_debug(f"已清除 {self.current_book_name} 的所有选择")
 
                 # 计算并显示总共选择的文章数量
                 if hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs'):
@@ -890,7 +1211,7 @@ class ArticleManagerMixin:
         # 更新状态
         self.status_label.setText(f"已选择 {len(selected_items)} 个知识库")
         self.selected_article_count_label.setText("已选: 全部")
-        self.log_handler.emit_log(f"已选择 {len(selected_items)} 个知识库，将导出全部文章")
+        DebugLogger.log_debug(f"已选择 {len(selected_items)} 个知识库，将导出全部文章")
 
         # 启用相关控件
         self.article_search_input.setEnabled(False)  # 禁用搜索，因为没有显示具体文章
