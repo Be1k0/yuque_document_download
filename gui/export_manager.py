@@ -1,13 +1,73 @@
 import os
 import asyncio
 from PyQt5.QtWidgets import QMessageBox, QFileDialog, QTabWidget
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 
 from src.libs.constants import GLOBAL_CONFIG, MutualAnswer
 from src.libs.log import Log
 from src.core.scheduler import Scheduler
 from src.libs.threaded_image_downloader import ThreadedImageDownloader
 from utils import AsyncWorker
+
+
+class ImageDownloadWorker(QThread):
+    """图片下载工作线程"""
+    progress_signal = pyqtSignal(int, int, str)  # downloaded, total, current_filename
+    log_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(int, int)  # processed_files, total_images
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, md_files, download_threads, doc_image_prefix, image_rename_mode,
+                 image_file_prefix, yuque_cdn_domain):
+        super().__init__()
+        self.md_files = md_files
+        self.download_threads = download_threads
+        self.doc_image_prefix = doc_image_prefix
+        self.image_rename_mode = image_rename_mode
+        self.image_file_prefix = image_file_prefix
+        self.yuque_cdn_domain = yuque_cdn_domain
+        self.total_images = 0
+        self.processed_files = 0
+        self.current_filename = ""
+
+    def run(self):
+        """执行图片下载任务"""
+        try:
+            downloader = ThreadedImageDownloader(
+                max_workers=self.download_threads,
+                progress_callback=self._on_progress_update
+            )
+
+            for md_file in self.md_files:
+                try:
+                    # 设置当前正在处理的文件名
+                    self.current_filename = os.path.basename(md_file)
+
+                    image_count = downloader.process_single_file(
+                        md_file_path=md_file,
+                        image_url_prefix=self.doc_image_prefix,
+                        image_rename_mode=self.image_rename_mode,
+                        image_file_prefix=self.image_file_prefix,
+                        yuque_cdn_domain=self.yuque_cdn_domain
+                    )
+                    self.total_images += image_count
+                    self.processed_files += 1
+
+                    if image_count > 0:
+                        self.log_signal.emit(f"处理文件 {os.path.basename(md_file)}，下载了 {image_count} 张图片")
+
+                except Exception as e:
+                    self.log_signal.emit(f"处理文件 {md_file} 时出错: {str(e)}")
+                    continue
+
+            self.finished_signal.emit(self.processed_files, self.total_images)
+
+        except Exception as e:
+            self.error_signal.emit(str(e))
+
+    def _on_progress_update(self, downloaded, total):
+        """进度回调"""
+        self.progress_signal.emit(downloaded, total, self.current_filename)
 
 class ExportManagerMixin:
     def select_output_dir(self):
@@ -68,6 +128,9 @@ class ExportManagerMixin:
             output_dir = self.output_input.text()
             if output_dir:
                 GLOBAL_CONFIG.target_output_dir = output_dir
+
+            # 设置进度回调函数
+            answer.progress_callback = self._on_export_progress
 
             # 设置调试模式
             debug_mode = self.enable_debug_checkbox.isChecked()
@@ -185,23 +248,10 @@ class ExportManagerMixin:
             self.process_images_after_export()
         else:
             # 显示导出完成消息
-            QMessageBox.information(self, "导出完成", "所有知识库导出完成！")
-
-    def update_image_download_progress(self, downloaded, total):
-        """更新图片下载进度（线程安全版本）"""
-        if total > 0:
-            progress = int((downloaded / total) * 100)
-            # 使用QTimer.singleShot确保在主线程中更新UI
-            QTimer.singleShot(0, lambda: self._update_progress_ui(downloaded, total, progress))
-
-    def _update_progress_ui(self, downloaded, total, progress):
-        """在主线程中更新进度条UI"""
-        self.progress_bar.setValue(downloaded)
-        self.progress_bar.setMaximum(total)
-        self.progress_bar.setFormat(f"正在下载图片: {downloaded}/{total} ({progress}%)")
+            QMessageBox.information(self, "导出完成", "所有文章导出完成！")
 
     def process_images_after_export(self):
-        """导出完成后处理图片下载"""
+        """导出完成后处理图片下载（使用独立线程）"""
         try:
             output_dir = self.output_input.text() or GLOBAL_CONFIG.target_output_dir
 
@@ -218,61 +268,72 @@ class ExportManagerMixin:
 
             if not md_files:
                 self.log_handler.emit_log("未找到Markdown文件，跳过图片下载")
-                QMessageBox.information(self, "导出完成", "所有知识库导出完成！\n未找到Markdown文件，跳过图片下载。")
+                QMessageBox.information(self, "导出完成", "所有文章导出完成！\n未找到Markdown文件，跳过图片下载。")
                 return
-
-            # 创建多线程下载器
-            downloader = ThreadedImageDownloader(
-                max_workers=self.download_threads,
-                progress_callback=self.update_image_download_progress
-            )
-
-            total_images = 0
-            processed_files = 0
 
             self.log_handler.emit_log(
                 f"找到 {len(md_files)} 个Markdown文件，使用 {self.download_threads} 个线程下载图片")
 
-            # 处理每个Markdown文件
-            for md_file in md_files:
-                try:
-                    # 使用多线程下载器和用户设置的参数
-                    image_count = downloader.process_single_file(
-                        md_file_path=md_file,
-                        image_url_prefix=self.doc_image_prefix,
-                        image_rename_mode=self.image_rename_mode,
-                        image_file_prefix=self.image_file_prefix,
-                        yuque_cdn_domain=self.yuque_cdn_domain
-                    )
-                    total_images += image_count
-                    processed_files += 1
+            # 创建并启动图片下载工作线程
+            self.image_download_worker = ImageDownloadWorker(
+                md_files=md_files,
+                download_threads=self.download_threads,
+                doc_image_prefix=self.doc_image_prefix,
+                image_rename_mode=self.image_rename_mode,
+                image_file_prefix=self.image_file_prefix,
+                yuque_cdn_domain=self.yuque_cdn_domain
+            )
 
-                    if image_count > 0:
-                        self.log_handler.emit_log(f"处理文件 {os.path.basename(md_file)}，下载了 {image_count} 张图片")
+            # 连接信号
+            self.image_download_worker.progress_signal.connect(self._on_image_download_progress)
+            self.image_download_worker.log_signal.connect(self.log_handler.emit_log)
+            self.image_download_worker.finished_signal.connect(self._on_image_download_finished)
+            self.image_download_worker.error_signal.connect(self._on_image_download_error)
 
-                except Exception as e:
-                    self.log_handler.emit_log(f"处理文件 {md_file} 时出错: {str(e)}")
-                    continue
-
-            # 更新进度条为完成状态
-            self.progress_bar.setFormat("图片下载完成! (100%)")
-            self.progress_bar.setValue(self.progress_bar.maximum())
-
-            # 记录完成信息
-            self.log_handler.emit_log(f"图片下载完成！共处理 {processed_files} 个文件，下载了 {total_images} 张图片")
-
-            # 显示完成消息
-            QMessageBox.information(self, "导出完成",
-                                    f"所有知识库导出完成！\n\n图片下载统计：\n" +
-                                    f"处理文件数：{processed_files}\n" +
-                                    f"下载图片数：{total_images}\n" +
-                                    f"下载线程数：{self.download_threads}")
+            # 启动下载线程
+            self.image_download_worker.start()
 
         except Exception as e:
             error_msg = str(e)
             self.log_handler.emit_log(f"图片下载过程中出错: {error_msg}")
             QMessageBox.warning(self, "图片下载错误",
                                 f"导出完成，但图片下载过程中出错：\n{error_msg}")
+
+    def _on_image_download_progress(self, downloaded, total, current_filename):
+        """图片下载进度更新回调"""
+        if total > 0:
+            progress = int((downloaded / total) * 100)
+            self.progress_bar.setValue(downloaded)
+            self.progress_bar.setMaximum(total)
+            # 去掉.md扩展名
+            article_name = current_filename.replace('.md', '') if current_filename.endswith('.md') else current_filename
+            self.progress_bar.setFormat(f"文章：{article_name} 正在下载图片 （{downloaded}/{total}）{progress}%")
+
+    def _on_image_download_finished(self, processed_files, total_images):
+        """图片下载完成回调"""
+        # 更新进度条为完成状态
+        self.progress_bar.setFormat("图片下载完成! (100%)")
+        self.progress_bar.setValue(self.progress_bar.maximum())
+
+        # 记录完成信息
+        self.log_handler.emit_log(f"图片下载完成！共处理 {processed_files} 个文件，下载了 {total_images} 张图片")
+
+        # 显示完成消息
+        QMessageBox.information(self, "导出完成",
+                                f"所有文章导出完成！\n\n图片下载统计：\n" +
+                                f"处理文件数：{processed_files}\n" +
+                                f"下载图片数：{total_images}\n" +
+                                f"下载线程数：{self.download_threads}")
+
+    def _on_export_progress(self, message):
+        """导出进度回调"""
+        self.progress_bar.setFormat(message)
+
+    def _on_image_download_error(self, error_msg):
+        """图片下载错误回调"""
+        self.log_handler.emit_log(f"图片下载过程中出错: {error_msg}")
+        QMessageBox.warning(self, "图片下载错误",
+                            f"导出完成，但图片下载过程中出错：\n{error_msg}")
 
     def on_export_error(self, error_msg):
         """导出出错的回调"""
