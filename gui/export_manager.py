@@ -131,6 +131,9 @@ class ExportManagerMixin:
             # 设置进度回调函数
             answer.progress_callback = self._on_export_progress
 
+            # 保存answer对象以便后续获取统计信息
+            self._current_answer = answer
+
             # 设置调试模式
             debug_mode = self.enable_debug_checkbox.isChecked()
             Log.set_debug_mode(debug_mode)
@@ -234,12 +237,20 @@ class ExportManagerMixin:
 
             return
 
+        # 获取下载统计信息
+        if hasattr(self, '_current_answer') and self._current_answer:
+            downloaded_count = self._current_answer.downloaded_count
+            skipped_count = self._current_answer.skipped_count
+        else:
+            downloaded_count = 0
+            skipped_count = 0
+
         # 更新进度条为完成状态
         self.progress_bar.setValue(self.progress_bar.maximum())
         self.progress_bar.setFormat("导出完成! (100%)")
 
         # 记录到日志
-        self.log_handler.emit_log("导出完成!")
+        self.log_handler.emit_log(f"导出完成! 下载了 {downloaded_count} 篇文档，跳过了 {skipped_count} 篇已存在的文档")
         self.status_label.setText("导出完成!")
 
         # 检查是否需要下载图片
@@ -247,7 +258,10 @@ class ExportManagerMixin:
             self.process_images_after_export()
         else:
             # 显示导出完成消息
-            QMessageBox.information(self, "导出完成", "所有文章导出完成！")
+            QMessageBox.information(self, "导出完成",
+                                    f"所有文章导出完成！\n\n" +
+                                    f"下载文档数：{downloaded_count}\n" +
+                                    f"跳过文档数：{skipped_count}")
 
     def process_images_after_export(self):
         """导出完成后处理图片下载（使用独立线程）"""
@@ -314,15 +328,27 @@ class ExportManagerMixin:
         self.progress_bar.setFormat("图片下载完成! (100%)")
         self.progress_bar.setValue(self.progress_bar.maximum())
 
+        # 获取下载统计信息
+        if hasattr(self, '_current_answer') and self._current_answer:
+            downloaded_count = self._current_answer.downloaded_count
+            skipped_count = self._current_answer.skipped_count
+        else:
+            downloaded_count = 0
+            skipped_count = 0
+
         # 记录完成信息
         self.log_handler.emit_log(f"图片下载完成！共处理 {processed_files} 个文件，下载了 {total_images} 张图片")
 
         # 显示完成消息
         QMessageBox.information(self, "导出完成",
-                                f"所有文章导出完成！\n\n图片下载统计：\n" +
-                                f"处理文件数：{processed_files}\n" +
-                                f"下载图片数：{total_images}\n" +
-                                f"下载线程数：{self.download_threads}")
+                                f"所有文章导出完成！\n\n" +
+                                f"文档统计：\n" +
+                                f"  下载文档数：{downloaded_count}\n" +
+                                f"  跳过文档数：{skipped_count}\n\n" +
+                                f"图片下载统计：\n" +
+                                f"  处理文件数：{processed_files}\n" +
+                                f"  下载图片数：{total_images}\n" +
+                                f"  下载线程数：{self.download_threads}")
 
     def _on_export_progress(self, message):
         """导出进度回调"""

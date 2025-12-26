@@ -77,6 +77,8 @@ class MutualAnswer:
     download_range: str = "all"  
     selected_docs: Dict[str, List[str]] = field(default_factory=dict) 
     progress_callback: Optional[callable] = None
+    skipped_count: int = 0
+    downloaded_count: int = 0
 
 
 @dataclass

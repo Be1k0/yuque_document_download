@@ -213,6 +213,34 @@ class Scheduler:
                         Log.info(f"跳过非文档条目: {doc_title} (类型: {doc_type})")
                         continue
 
+                    # 根据层级结构构建目录路径
+                    target_dir = book_dir
+                    parent_uuid = doc.get('parent_uuid', '')
+                    if parent_uuid and parent_uuid in level_map:
+                        path_parts = Scheduler._build_doc_path(parent_uuid, level_map)
+                        if path_parts:
+                            target_dir = os.path.join(book_dir, *path_parts)
+
+                    # 生成文件名
+                    filename = format_filename(doc_title) + '.md'
+                    file_path = os.path.join(target_dir, filename)
+
+                    # 智能跳过已存在的文件
+                    if answer.skip:
+                        # 检查原始文件路径
+                        if os.path.exists(file_path):
+                            answer.skipped_count += 1
+                            Log.info(f"跳过已存在的文件: {filename}")
+                            continue
+
+                        # 检查图片下载后可能移动到的子目录中的文件
+                        folder_name = os.path.splitext(filename)[0]
+                        subdir_file_path = os.path.join(target_dir, folder_name, filename)
+                        if os.path.exists(subdir_file_path):
+                            answer.skipped_count += 1
+                            Log.info(f"跳过已存在的文件（在子目录中）: {folder_name}/{filename}")
+                            continue
+
                     # 调用进度回调，显示正在下载的文章
                     if answer.progress_callback:
                         answer.progress_callback(f"正在下载文章 ({i}/{len(filtered_docs)}): {doc_title}")
@@ -221,6 +249,9 @@ class Scheduler:
 
                     # 直接传递完整的doc对象
                     await Scheduler._download_doc(namespace, doc, book_dir, answer, level_map)
+                    
+                    # 记录下载成功
+                    answer.downloaded_count += 1
 
                     # 添加延迟避免请求过快
                     await asyncio.sleep(GLOBAL_CONFIG.duration / 1000)
@@ -241,7 +272,7 @@ class Scheduler:
         try:
             doc_title = doc.get('title', 'Untitled')
             doc_slug = doc.get('slug', '')
-            doc_url = doc.get('url', '')  # 获取URL
+            doc_url = doc.get('url', '')
             doc_uuid = doc.get('uuid', '')
             parent_uuid = doc.get('parent_uuid', '')
 
@@ -253,7 +284,6 @@ class Scheduler:
             # 根据层级结构构建目录路径
             target_dir = book_dir
             if parent_uuid and parent_uuid in level_map:
-                # 递归构建父级路径
                 path_parts = Scheduler._build_doc_path(parent_uuid, level_map)
                 if path_parts:
                     target_dir = os.path.join(book_dir, *path_parts)
@@ -263,22 +293,6 @@ class Scheduler:
             # 生成文件名
             filename = format_filename(doc_title) + '.md'
             file_path = os.path.join(target_dir, filename)
-
-            # 检查是否跳过已存在的文件
-            # 不仅检查原始路径，还要检查图片下载后可能移动到的子目录
-            if answer.skip:
-                # 检查原始文件路径
-                if os.path.exists(file_path):
-                    Log.info(f"跳过已存在的文件: {filename}")
-                    return
-
-                # 检查图片下载后可能移动到的子目录中的文件
-                # 图片下载功能会将文章移动到以文章名命名的子目录中
-                folder_name = os.path.splitext(filename)[0]  # 去掉.md扩展名
-                subdir_file_path = os.path.join(target_dir, folder_name, filename)
-                if os.path.exists(subdir_file_path):
-                    Log.info(f"跳过已存在的文件（在子目录中）: {folder_name}/{filename}")
-                    return
 
             # 获取文档内容
             markdown_content = await YuqueApi.export_markdown(namespace, doc_url, answer.line_break)
