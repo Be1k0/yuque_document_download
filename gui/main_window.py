@@ -6,10 +6,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QIcon
 from PyQt5.QtCore import Qt, pyqtSignal
-
 from src.libs.constants import GLOBAL_CONFIG
 from utils import static_resource_path, StdoutRedirector, QPasswordLineEdit
-
 from .login_manager import LoginManagerMixin
 from .book_manager import BookManagerMixin
 from .article_manager import ArticleManagerMixin, ArticleListWidget
@@ -465,13 +463,13 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 创建主分割器
         main_splitter = QSplitter(Qt.Vertical)
-        main_layout.addWidget(main_splitter, 1)  # 占据大部分空间
+        main_layout.addWidget(main_splitter, 1) 
 
         # 上半部分 - 操作区域
         top_widget = QWidget()
         top_layout = QVBoxLayout(top_widget)
         top_layout.setContentsMargins(0, 0, 0, 0)
-        top_widget.setMinimumHeight(410)  # 设置最小高度防止上半部分变小
+        top_widget.setMinimumHeight(410)
 
         # 创建Tab小部件
         tabs = QTabWidget()
@@ -523,11 +521,35 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.login_button.clicked.connect(self.login)
         login_form_layout.addWidget(self.login_button)
 
+        # 添加一些间距
+        login_form_layout.addSpacing(5)
+
+        self.web_login_button = QPushButton("网页端登录")
+        self.web_login_button.setMinimumHeight(36)
+        self.web_login_button.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+            QPushButton:pressed {
+                background-color: #545b62;
+            }
+            QPushButton:focus {
+                outline: none;
+            }
+        """)
+        self.web_login_button.clicked.connect(self.web_login)
+        login_form_layout.addWidget(self.web_login_button)
+
         self.login_group.setLayout(login_form_layout)
         login_layout.addWidget(self.login_group)
 
-        # Add some explanation text
-        login_help = QLabel("请输入您的语雀账号和密码进行登录。登录信息仅用于获取知识库数据，不会被发送到第三方。")
+        login_help = QLabel("请输入您的语雀账号和密码进行登录，或使用网页端登录。登录信息仅用于获取知识库数据，不会被发送到第三方。")
         login_help.setWordWrap(True)
         login_help.setStyleSheet("color: #6c757d; padding: 10px;")
         login_layout.addWidget(login_help)
@@ -643,28 +665,28 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 知识库列表
         self.book_list = QListWidget()
         self.book_list.setSelectionMode(QListWidget.MultiSelection)
-        self.book_list.setMinimumHeight(120)  # 优化最小高度
-        self.book_list.setMinimumWidth(200)  # 优化最小宽度
+        self.book_list.setMinimumHeight(120)  
+        self.book_list.setMinimumWidth(200) 
         left_layout.addWidget(self.book_list)
 
         # 知识库选择按钮区域
         buttons_layout = QVBoxLayout()
-        buttons_layout.setSpacing(8)  # 优化按钮区域间距
+        buttons_layout.setSpacing(8) 
 
         # 第一行：全选和取消全选按钮
         select_buttons_layout = QHBoxLayout()
-        select_buttons_layout.setSpacing(8)  # 优化按钮间距
+        select_buttons_layout.setSpacing(8)  
 
         self.select_all_books_btn = QPushButton("全选")
-        self.select_all_books_btn.setMinimumHeight(30)  # 优化按钮高度
-        self.select_all_books_btn.setMaximumHeight(34)  # 优化最大高度
+        self.select_all_books_btn.setMinimumHeight(30)  
+        self.select_all_books_btn.setMaximumHeight(34)  
         self.select_all_books_btn.setStyleSheet("font-size: 13px;")
         self.select_all_books_btn.clicked.connect(self.select_all_books)
         select_buttons_layout.addWidget(self.select_all_books_btn)
 
-        self.deselect_all_books_btn = QPushButton("取消全选")
-        self.deselect_all_books_btn.setMinimumHeight(30)  # 优化按钮高度
-        self.deselect_all_books_btn.setMaximumHeight(34)  # 优化最大高度
+        self.deselect_all_books_btn = QPushButton("取消选择")
+        self.deselect_all_books_btn.setMinimumHeight(30)  
+        self.deselect_all_books_btn.setMaximumHeight(34)  
         self.deselect_all_books_btn.setStyleSheet("""
             QPushButton {
                 font-size: 13px;
@@ -702,12 +724,12 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 中间面板：选择文章
         center_panel = QGroupBox("文章列表")
         center_layout = QVBoxLayout(center_panel)
-        center_layout.setContentsMargins(10, 15, 10, 15)  # 优化边距
-        center_layout.setSpacing(10)  # 优化间距
+        center_layout.setContentsMargins(10, 15, 10, 15)  
+        center_layout.setSpacing(10)  
 
         # 文章搜索框
         article_search_layout = QHBoxLayout()
-        article_search_layout.setSpacing(8)  # 优化搜索框组件间距
+        article_search_layout.setSpacing(8)  
         article_search_label = QLabel("搜索文章:")
         article_search_label.setMinimumWidth(70)
         self.article_search_input = QLineEdit()
@@ -725,22 +747,22 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 文章选择控制区域
         article_control_layout = QVBoxLayout()
-        article_control_layout.setSpacing(8)  # 优化控制区域间距
+        article_control_layout.setSpacing(8)  
 
         # 第一行：全选和取消全选按钮
         article_buttons_layout = QHBoxLayout()
-        article_buttons_layout.setSpacing(8)  # 优化按钮间距
+        article_buttons_layout.setSpacing(8)  
 
         self.select_all_articles_btn = QPushButton("全选文章")
-        self.select_all_articles_btn.setMinimumHeight(30)  # 优化按钮高度
-        self.select_all_articles_btn.setMaximumHeight(34)  # 优化最大高度
+        self.select_all_articles_btn.setMinimumHeight(30)  
+        self.select_all_articles_btn.setMaximumHeight(34)  
         self.select_all_articles_btn.setStyleSheet("font-size: 13px;")
         self.select_all_articles_btn.clicked.connect(self.select_all_articles)
         article_buttons_layout.addWidget(self.select_all_articles_btn)
 
         self.deselect_all_articles_btn = QPushButton("取消选择")
-        self.deselect_all_articles_btn.setMinimumHeight(30)  # 优化按钮高度
-        self.deselect_all_articles_btn.setMaximumHeight(34)  # 优化最大高度
+        self.deselect_all_articles_btn.setMinimumHeight(30)  
+        self.deselect_all_articles_btn.setMaximumHeight(34)  
         self.deselect_all_articles_btn.setStyleSheet("""
             QPushButton {
                 font-size: 13px;
@@ -776,14 +798,14 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_panel.setMinimumHeight(250)  # 大幅减小最小高度
-        right_layout.setSpacing(8)  # 减小右侧面板间距
+        right_panel.setMinimumHeight(250)  
+        right_layout.setSpacing(8)  
 
         # 导出选项组
         options_group = QGroupBox("导出选项")
         options_layout = QVBoxLayout()
-        options_layout.setContentsMargins(10, 10, 10, 10)  # 减小选项组边距
-        options_layout.setSpacing(4)  # 进一步减小选项组间距
+        options_layout.setContentsMargins(10, 10, 10, 10)  
+        options_layout.setSpacing(4)  
         options_group.setLayout(options_layout)
 
         # 创建常规复选框样式的选项
@@ -802,12 +824,12 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.download_images_checkbox = QCheckBox("下载图片到本地")
         self.download_images_checkbox.setToolTip("将Markdown文档中的图片下载到本地，并更新图片链接")
         self.download_images_checkbox.setChecked(True)
-        self.download_images_checkbox.setStyleSheet("font-size: 12px; padding: 3px 0; margin: 0 0 2px 0;")  # 增加底部外边距
+        self.download_images_checkbox.setStyleSheet("font-size: 12px; padding: 3px 0; margin: 0 0 2px 0;")  
         options_layout.addWidget(self.download_images_checkbox)
 
         # 输出目录设置 - 改进的垂直布局
         output_label = QLabel("输出目录:")
-        output_label.setStyleSheet("font-weight: bold; font-size: 12px; margin: 0 0 2px 0;")  # 底部外边距
+        output_label.setStyleSheet("font-weight: bold; font-size: 12px; margin: 0 0 2px 0;")  
         options_layout.addWidget(output_label)
         
         self.output_input = QLineEdit()
@@ -829,20 +851,20 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
                 outline: none;
             }
         """)
-        self.output_input.setMinimumHeight(26)  # 调整高度
-        self.output_input.setMaximumHeight(26)  # 限制最大高度
-        self.output_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 自适应宽度
-        self.output_input.setToolTip(GLOBAL_CONFIG.target_output_dir)  # 完整路径显示在tooltip中
-        self.output_input.setCursorPosition(0)  # 设置光标位置到开始
+        self.output_input.setMinimumHeight(26)  
+        self.output_input.setMaximumHeight(26)  
+        self.output_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  
+        self.output_input.setToolTip(GLOBAL_CONFIG.target_output_dir)  
+        self.output_input.setCursorPosition(0)  
         options_layout.addWidget(self.output_input)
 
         # 设置默认输出目录
         self.output_input.setText(GLOBAL_CONFIG.target_output_dir)
 
         output_button = QPushButton("选择")
-        output_button.setMinimumHeight(26)  # 调整高度
-        output_button.setMaximumHeight(26)  # 限制最大高度
-        output_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 自适应宽度，与输入框一致
+        output_button.setMinimumHeight(26)  
+        output_button.setMaximumHeight(26)  
+        output_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  
         output_button.setStyleSheet("""
             QPushButton {
                 background-color: #0d6efd;
@@ -872,11 +894,11 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 导出操作按钮区域
         export_actions_layout = QVBoxLayout()
         export_actions_layout.setContentsMargins(0, 0, 0, 0)
-        export_actions_layout.setSpacing(10)  # 优化操作按钮间距
+        export_actions_layout.setSpacing(10)  
 
         # 开始导出按钮
         self.export_button = QPushButton("开始导出")
-        self.export_button.setMinimumHeight(36)  # 优化按钮高度
+        self.export_button.setMinimumHeight(36)  
         self.export_button.setStyleSheet("""
             QPushButton {
                 background-color: #0d6efd;
@@ -902,7 +924,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 清除缓存按钮
         self.clean_button = QPushButton("清理缓存")
-        self.clean_button.setMinimumHeight(32)  # 优化按钮高度
+        self.clean_button.setMinimumHeight(32)  
         self.clean_button.setStyleSheet("""
             QPushButton {
                 background-color: #dc3545;
@@ -926,9 +948,9 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         right_layout.addLayout(export_actions_layout)
 
         # 添加三个面板到水平布局 - 优化面板比例
-        selection_horizontal.addWidget(left_panel, 1)  # 左侧自适应
-        selection_horizontal.addWidget(center_panel, 2)  # 中间比例更大，更适合显示文章列表
-        selection_horizontal.addWidget(right_panel, 1)  # 右侧自适应
+        selection_horizontal.addWidget(left_panel, 1)  
+        selection_horizontal.addWidget(center_panel, 2)  
+        selection_horizontal.addWidget(right_panel, 1)  
 
         # 设置页面
         settings_page = self.create_settings_page()
@@ -953,10 +975,6 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         top_layout.addWidget(tabs)
         main_splitter.addWidget(top_widget)
 
-        # 移除底部的日志区域
-        # main_splitter.addWidget(bottom_widget)
-        # main_splitter.setHandleWidth(0)
-
         # 添加进度条到底部 - 仅在知识库选择页可见
         self.progress_widget = QWidget()
         progress_layout = QVBoxLayout(self.progress_widget)
@@ -964,7 +982,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         progress_layout.setSpacing(8)
 
         self.progress_label = QLabel("")
-        self.progress_label.setVisible(False)  # 隐藏进度标签
+        self.progress_label.setVisible(False) 
         progress_layout.addWidget(self.progress_label)
 
         self.progress_bar = QProgressBar()
@@ -998,7 +1016,6 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 默认隐藏进度条，仅在知识库选择页显示
         self.progress_widget.setVisible(False)
 
-        # Add copyright info
         copyright_label = QLabel("Copyright © 2025 By Be1k0 | https://github.com/Be1k0")
         copyright_label.setAlignment(Qt.AlignCenter)
         copyright_label.setStyleSheet("color: #6c757d; padding: 5px;")

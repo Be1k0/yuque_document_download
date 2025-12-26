@@ -1,33 +1,34 @@
 import os
 import json
 import shutil
+import time
+import threading
 from PyQt5.QtWidgets import QMessageBox, QTabWidget
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest
 from src.libs.constants import YuqueAccount
 from src.libs.log import Log
 from src.core.yuque import YuqueApi
-from src.libs.tools import get_local_cookies
+from src.libs.tools import get_local_cookies, save_cookies
 from utils import AsyncWorker, resource_path, create_circular_pixmap
 
 class LoginManagerMixin:
+    # 定义信号
+    web_login_finished = pyqtSignal()
+    web_login_error = pyqtSignal(str)
+
     def check_login_status(self):
         """检查是否已经登录"""
         cookies = get_local_cookies()
         if cookies:
-            # 显示用户信息，隐藏登录表单
             self.show_user_info()
-            # 选择第二个标签页（知识库选择）
             tabs = self.findChild(QTabWidget)
             if tabs:
                 tabs.setCurrentIndex(1)
             self.load_books()
         else:
-            # 显示登录表单，隐藏用户信息
             self.show_login_form()
-            # 检查我们是否已保存凭据
-            # CLI配置已移除，不再自动填充用户名密码
             pass
 
     def login(self):
@@ -52,6 +53,130 @@ class LoginManagerMixin:
         self.login_worker.taskError.connect(self.on_login_error)
         self.login_worker.start()
 
+    def web_login(self):
+        """网页端登录"""
+        # 禁用网页登录按钮并显示状态
+        self.web_login_button.setEnabled(False)
+        self.web_login_button.setText("正在打开浏览器...")
+
+        # 连接信号
+        self.web_login_finished.connect(self.on_web_login_finished)
+        self.web_login_error.connect(self.on_web_login_error)
+
+        # 在单独的线程中启动网页登录过程
+        self.web_login_thread = threading.Thread(target=self._web_login_thread, daemon=True)
+        self.web_login_thread.start()
+
+    def _web_login_thread(self):
+        """网页登录线程函数"""
+        try:
+            from playwright.sync_api import sync_playwright
+            import playwright.sync_api as p
+            import asyncio
+
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
+            with sync_playwright() as p:
+                browser_channels = ["msedge", "chrome", "360chrome", "qqbrowser", "brave", None]
+                browser = None
+                for channel in browser_channels:
+                    try:
+                        if channel:
+                            Log.info(f"启动系统中的 {channel}...")
+                            browser = p.chromium.launch(headless=False, channel=channel)
+                        if browser:
+                            break
+                    except Exception:
+                        continue
+
+                if not browser:
+                    self.web_login_error.emit("未检测到适配的浏览器，请先安装Edge或谷歌浏览器后再运行。")
+                    return
+
+                context = browser.new_context()
+                page = context.new_page()
+                page.goto("https://www.yuque.com/login")
+
+                try:
+                    page.wait_for_url(lambda url: "login" not in url and "yuque.com" in url, timeout=300000)
+                    Log.info("检测到登录成功！正在提取数据...")
+                    page.wait_for_load_state('networkidle')
+                    cookies = context.cookies()
+                except Exception as e:
+                    Log.error("登录失败或超时。")
+                    self.web_login_error.emit("登录失败或超时，请重试。")
+                    browser.close()
+                    return
+
+                if not cookies:
+                    self.web_login_error.emit("错误：未提取到任何 Cookie。")
+                    browser.close()
+                    return
+
+                # 处理Cookie，仅拼接字符串
+                cookie_list = []
+                for cookie in cookies:
+                    cookie_list.append(f"{cookie['name']}={cookie['value']}")
+
+                # 强制设置过期时间为当前时间 + 一周（毫秒级）
+                current_time_ms = int(time.time() * 1000)
+                expire_time_ms = current_time_ms + (7 * 24 * 60 * 60 * 1000)
+                Log.info(f"设置 Cookie 过期时间为一周后（{expire_time_ms}）")
+
+                # 拼接Cookie字符串
+                cookie_string = "; ".join(cookie_list)
+                save_cookies(cookie_string, expire_time_ms)
+
+                # 关闭浏览器
+                time.sleep(1)
+                browser.close()
+
+                # 获取用户信息
+                Log.info("正在获取用户信息...")
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    success = loop.run_until_complete(YuqueApi.get_user_info())
+                    loop.close()
+
+                    if not success:
+                        self.web_login_error.emit("获取用户信息失败，请重试。")
+                        return
+                except Exception as e:
+                    Log.error(f"获取用户信息时出错: {e}")
+                    self.web_login_error.emit(f"获取用户信息时出错: {str(e)}")
+                    return
+
+                # 通知登录成功
+                self.web_login_finished.emit()
+
+        except ImportError:
+            self.web_login_error.emit("未安装playwright库，请先运行: pip install playwright && playwright install")
+        except Exception as e:
+            Log.error(f"网页登录出错: {e}")
+            self.web_login_error.emit(f"网页登录出错: {str(e)}")
+
+    def on_web_login_finished(self):
+        """网页登录完成后的回调"""
+        self.web_login_button.setEnabled(True)
+        self.web_login_button.setText("网页端登录")
+        QMessageBox.information(self, "登录成功", "成功登录到语雀账号")
+
+        # 显示用户信息，隐藏登录表单
+        self.show_user_info()
+
+        # 切换到知识库选择标签页
+        tabs = self.findChild(QTabWidget)
+        if tabs:
+            tabs.setCurrentIndex(1)
+        self.load_books()
+
+    def on_web_login_error(self, error_msg):
+        """网页登录出错的回调"""
+        self.web_login_button.setEnabled(True)
+        self.web_login_button.setText("网页端登录")
+        QMessageBox.critical(self, "登录错误", f"网页登录出错: {error_msg}")
+
     def on_login_finished(self, result):
         """登录完成后的回调"""
         self.login_button.setEnabled(True)
@@ -60,11 +185,7 @@ class LoginManagerMixin:
         if result:
             # 登录成功
             QMessageBox.information(self, "登录成功", "成功登录到语雀账号")
-
-            # 显示用户信息，隐藏登录表单
             self.show_user_info()
-
-            # 切换到知识库选择标签页
             tabs = self.findChild(QTabWidget)
             if tabs:
                 tabs.setCurrentIndex(1)

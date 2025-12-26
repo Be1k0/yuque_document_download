@@ -188,22 +188,22 @@ class SettingsManagerMixin:
                     self.download_threads = threads
                 else:
                     # 显示错误提示并恢复到有效值
-                    QMessageBox.warning(self, "输入错误", "下载线程数必须在1-30之间！")
+                    QMessageBox.warning(self, "输入错误", "下载线程数只能在1-30之间！")
                     self.threads_input.setText(str(self.download_threads))
-                    return  # 无效值，不保存
+                    return  
 
             # 保存其他设置
             # 获取选中的单选按钮文本并转换为底层代码期望的值
             if self.rename_radio1.isChecked():
-                self.image_rename_mode = "asc"  # 递增命名对应asc
+                self.image_rename_mode = "asc"  
             else:
-                self.image_rename_mode = "raw"  # 保持图片原名对应raw
+                self.image_rename_mode = "raw"  
             self.image_file_prefix = self.file_prefix_input.text()
             self.yuque_cdn_domain = self.cdn_input.text()
 
         except ValueError:
             # 输入无效时显示提示并恢复到有效值
-            QMessageBox.warning(self, "输入错误", "下载线程数必须是1-30之间的数字！")
+            QMessageBox.warning(self, "输入错误", "下载线程数只能是1-30之间的数字！")
             self.threads_input.setText(str(self.download_threads))
 
     def save_settings(self):
@@ -352,7 +352,7 @@ class SettingsManagerMixin:
         title_label.setStyleSheet("color: #0d6efd; margin-bottom: 10px;")
         about_layout.addWidget(title_label)
 
-        # 主要信息區域
+        # 主要信息部分
         info_widget = QWidget()
         info_layout = QVBoxLayout(info_widget)
         info_layout.setContentsMargins(0, 0, 0, 0)

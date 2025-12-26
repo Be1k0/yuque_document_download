@@ -11,24 +11,24 @@ class BookManagerMixin:
         self.book_list.clear()
         self.progress_label.setText("正在加载知识库列表...")
 
-        # Try to get cached books info
+        # 尝试从缓存获取知识库信息
         books_info = get_cache_books_info()
 
         if not books_info:
-            # If no cached info, fetch from API
+            # 如果缓存中没有，则异步加载
             self.books_worker = AsyncWorker(YuqueApi.get_user_bookstacks)
             self.books_worker.taskFinished.connect(self.on_books_loaded)
             self.books_worker.taskError.connect(self.on_books_error)
             self.books_worker.start()
             return
 
-        # Display books from cache
+        # 如果缓存中有，直接显示
         self.display_books(books_info)
 
     def on_books_loaded(self, result):
         """知识库加载完成后的回调"""
         if result:
-            books_info = get_cache_books_info()  # Refresh from cache
+            books_info = get_cache_books_info()  
             self.display_books(books_info)
         else:
             QMessageBox.warning(self, "加载失败", "无法获取知识库列表")
@@ -126,7 +126,6 @@ class BookManagerMixin:
         filter_text = text.lower()
         for i in range(self.book_list.count()):
             item = self.book_list.item(i)
-            # 去掉emoji前缀后再比较
             book_name = item.text()[2:].strip().lower()
             item.setHidden(filter_text not in book_name)
 

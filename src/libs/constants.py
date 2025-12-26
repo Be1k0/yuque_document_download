@@ -54,17 +54,6 @@ class YuqueAccount:
     password: str
 
 
-# @dataclass
-# class UserCliConfig:
-#     """用户的CLI配置（已移除CLI支持）"""
-#     username: str = ""
-#     password: str = ""
-#     toc_range: List[str] = field(default_factory=list)
-#     skip: bool = True
-#     line_break: bool = True
-#     host: str = ""
-#     output: str = ""
-
 @dataclass
 class YuqueLoginUserInfo:
     """语雀登录用户信息"""
@@ -85,9 +74,9 @@ class MutualAnswer:
     toc_range: List[str]
     skip: bool
     line_break: bool
-    download_range: str = "all"  # 'all' - 所有文章, 'recent' - 最近文章, 'custom' - 自定义范围, 'selected' - 选择特定文章
-    selected_docs: Dict[str, List[str]] = field(default_factory=dict)  # 知识库名称 -> 选中的文章ID列表
-    progress_callback: Optional[callable] = None  # 进度回调函数
+    download_range: str = "all"  
+    selected_docs: Dict[str, List[str]] = field(default_factory=dict) 
+    progress_callback: Optional[callable] = None
 
 
 @dataclass
@@ -96,15 +85,15 @@ class TreeNode:
     parent_id: str
     uuid: str
     full_path: str
-    node_type: str  # 对应rust中的type字段
+    node_type: str 
     children: List['TreeNode']
     title: str
     name: str
     child_uuid: str
     visible: int
-    p_slug: str  # 父级slug
-    user: str  # 文档所属user
-    url: str  # 文档地址
+    p_slug: str 
+    user: str 
+    url: str
 
 
 @dataclass

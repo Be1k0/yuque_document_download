@@ -13,7 +13,7 @@ from ..libs.tools import (
     save_user_info, save_books_info
 )
 
-# 导入调试日志模块（如果启用调试模式）
+# 导入调试日志模块
 try:
     from ..libs.debug_logger import DebugLogger
 
@@ -66,6 +66,38 @@ class YuqueApi:
             Log.error(f"登录失败: {str(e)}")
             if _has_debug_logger:
                 DebugLogger.log_error(f"登录过程发生异常: {str(e)}")
+            return False
+
+    @staticmethod
+    async def get_user_info() -> bool:
+        """获取当前登录用户信息并存储"""
+        try:
+            if _has_debug_logger:
+                DebugLogger.log_info("开始获取用户信息")
+
+            resp = await Request.get("/api/mine")
+
+            if _has_debug_logger:
+                DebugLogger.log_data("获取用户信息响应", resp)
+
+            if resp.get("data"):
+                user_info = resp["data"]
+                if save_user_info(user_info):
+                    if _has_debug_logger:
+                        safe_user_info = user_info.copy() if isinstance(user_info, dict) else user_info
+                        DebugLogger.log_data("用户信息", safe_user_info)
+                    return True
+                else:
+                    Log.error("缓存目录创建失败")
+                    return False
+            else:
+                Log.error("获取用户信息失败")
+                return False
+
+        except Exception as e:
+            Log.error(f"获取用户信息失败: {str(e)}")
+            if _has_debug_logger:
+                DebugLogger.log_error(f"获取用户信息过程发生异常: {str(e)}")
             return False
 
     @staticmethod
@@ -237,7 +269,6 @@ class YuqueApi:
                 try:
                     matches = re.search(pattern, text_content, re.DOTALL)
                     if matches:
-                        Log.debug(f"使用模式{i}找到匹配内容")
 
                         if "decodeURIComponent" in pattern:
                             # 需要URL解码
@@ -278,42 +309,6 @@ class YuqueApi:
                         toc_count = len(toc_data)
                         Log.debug(f"共 {toc_count} 个条目")
                         return {"book": {"toc": toc_data}}
-
-            # 如果所有模式都失败，尝试查找文档列表的替代方式
-            try:
-                # 使用HTML解析寻找目录结构
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(text_content, 'html.parser')
-
-                # 查找侧边栏目录
-                sidebar_items = soup.select('.catalog-item, .sidebar-item, .doc-catalog-item')
-                if sidebar_items:
-                    count = len(sidebar_items)
-                    Log.debug(f"通过HTML解析找到 {count} 个目录项")
-                    Log.info(f"通过HTML解析找到 {count} 个目录项")
-                    toc = []
-                    for item in sidebar_items:
-                        link = item.select_one('a')
-                        if link:
-                            href = link.get('href', '')
-                            title = link.text.strip()
-                            # 提取slug
-                            slug_match = re.search(r'/([^/]+)$', href)
-                            slug = slug_match.group(1) if slug_match else ''
-
-                            toc.append({
-                                "title": title,
-                                "slug": slug,
-                                "type": "doc",
-                                "url": href
-                            })
-
-                    if toc:
-                        return {"book": {"toc": toc}}
-            except ImportError:
-                Log.warn("BeautifulSoup未安装，无法通过HTML解析查找目录", detailed=True)
-            except Exception as e:
-                Log.warn(f"HTML解析失败: {str(e)}", detailed=True)
 
             Log.warn(f"无法在页面中找到知识库数据: {url}")
 
@@ -615,39 +610,10 @@ class YuqueApi:
             return False
 
     @staticmethod
-    async def get_user_info() -> Optional[Dict[str, Any]]:
-        """获取用户信息"""
-        try:
-            # 先尝试从缓存获取
-            cached_user = get_cache_user_info()
-            if cached_user:
-                return {
-                    "name": cached_user.name,
-                    "login": cached_user.login
-                }
-
-            # 如果缓存没有，从API获取
-            resp = await Request.get("/api/user")
-            if resp.get("data"):
-                user_info = resp["data"]
-                save_user_info(user_info)
-                return user_info
-            else:
-                return None
-
-        except Exception as e:
-            Log.error(f"获取用户信息失败: {str(e)}")
-            return None
-
-    @staticmethod
     def _process_image_links(content: str) -> str:
         """处理Markdown中的图片链接，保留原始链接"""
         if not content:
             return content
-
-        # 使用正则表达式识别并替换图片链接
-        # 标准Markdown格式：![alt](url)
-        # 实现时保留原始URL，不做下载处理
 
         return content
 
@@ -656,9 +622,4 @@ class YuqueApi:
         """处理Markdown中的附件链接，保留原始链接"""
         if not content:
             return content
-
-        # 使用正则表达式识别并替换附件链接
-        # 标准Markdown格式：[name](url)
-        # 实现时保留原始URL，不做下载处理
-
         return content

@@ -12,7 +12,6 @@ def resource_path(relative_path):
         base_path = os.path.dirname(sys.executable)
     else:
         # 开发环境，使用当前脚本所在目录
-
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
@@ -154,7 +153,7 @@ class StdoutRedirector(StringIO):
 
     def write(self, text):
         if not self.disable_terminal_output:
-            self.old_stdout.write(text)  # 同时保留终端输出
+            self.old_stdout.write(text)
 
         # 添加到缓冲区
         self.buffer += text
@@ -178,14 +177,14 @@ class StdoutRedirector(StringIO):
             self.old_stdout.flush()
 
 
-# Create a custom QPasswordLineEdit class for password input
+# 为密码输入创建自定义QPasswordLineEdit类
 class QPasswordLineEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setEchoMode(QLineEdit.Password)
 
 
-# Custom logger signal handler
+# 自定义记录器信号处理程序
 class LogSignalHandler(QObject):
     log_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int)
@@ -193,10 +192,9 @@ class LogSignalHandler(QObject):
     def emit_log(self, message):
         self.log_signal.emit(message)
 
-        # Check for document download progress messages
+        # 检查文档下载进度消息
         if "下载文档" in message and "/" in message and ")" in message:
             try:
-                # Extract current and total from "下载文档 (1/11): ..."
                 parts = message.split("(")[1].split(")")[0].split("/")
                 current = int(parts[0])
                 total = int(parts[1])

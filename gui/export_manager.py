@@ -12,9 +12,9 @@ from utils import AsyncWorker
 
 class ImageDownloadWorker(QThread):
     """图片下载工作线程"""
-    progress_signal = pyqtSignal(int, int, str)  # downloaded, total, current_filename
+    progress_signal = pyqtSignal(int, int, str)  
     log_signal = pyqtSignal(str)
-    finished_signal = pyqtSignal(int, int)  # processed_files, total_images
+    finished_signal = pyqtSignal(int, int)  
     error_signal = pyqtSignal(str)
 
     def __init__(self, md_files, download_threads, doc_image_prefix, image_rename_mode,
@@ -91,8 +91,7 @@ class ExportManagerMixin:
 
         try:
             # 检查是否有选择的文章
-            has_selected_articles = hasattr(self, '_current_answer') and hasattr(self._current_answer,
-                                                                                 'selected_docs') and self._current_answer.selected_docs
+            has_selected_articles = hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs') and self._current_answer.selected_docs
 
             # 创建并配置MutualAnswer对象
             answer = MutualAnswer(
@@ -153,7 +152,7 @@ class ExportManagerMixin:
 
             # 重置进度条
             self.progress_bar.setValue(0)
-            self.progress_bar.setMaximum(total_articles if total_articles > 0 else 100)  # 如果未选定具体文章，先使用100作为最大值
+            self.progress_bar.setMaximum(total_articles if total_articles > 0 else 100) 
             self.progress_bar.setFormat(f"准备导出: {export_info}")
 
             # 禁用UI元素

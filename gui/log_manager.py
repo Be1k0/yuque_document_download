@@ -90,20 +90,20 @@ class LogManagerMixin:
     def append_to_log(self, text):
         """使用信号槽机制安全地追加文本到日志窗口，根据类型设置不同颜色"""
         # 根据日志类型设置不同颜色
-        color = "#f8f8f8"  # 默认白色
+        color = "#f8f8f8"  
 
         if "错误" in text:
-            color = "#ff6b6b"  # 错误信息用红色
+            color = "#ff6b6b"  
         elif "成功" in text or "完成" in text:
-            color = "#69db7c"  # 成功信息用绿色
+            color = "#69db7c"  
         elif "警告" in text:
-            color = "#ffd43b"  # 警告信息用黄色
+            color = "#ffd43b" 
         elif "调试" in text:
-            color = "#a5d8ff"  # 调试信息用浅蓝色
+            color = "#a5d8ff"  
         elif "加载" in text or "准备" in text:
-            color = "#da77f2"  # 加载/准备信息用紫色
+            color = "#da77f2"  
         elif "导出" in text:
-            color = "#74c0fc"  # 导出信息用蓝色
+            color = "#74c0fc"  
 
         # 使用HTML格式化文本颜色
         formatted_text = f'<span style="color:{color};">{text}</span>'
@@ -120,8 +120,6 @@ class LogManagerMixin:
 
     def update_progress_label(self, message):
         """Update progress label with message (called from main thread)"""
-        # 不显示在进度标签，只记录到日志
-        # self.progress_label.setText(message)
 
         # 同时添加到日志文本框，使用信号槽机制
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -138,21 +136,21 @@ class LogManagerMixin:
                 pass
 
     def update_progress_bar(self, current, total):
-        """Update progress bar with current and total values (called from main thread)"""
+        """更新进度条"""
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         # 在进度条上直接显示当前状态
         self.progress_bar.setFormat(f"已导出: {current}/{total} ({int(current / total * 100 if total > 0 else 0)}%)")
 
     def setup_log_interception(self):
-        """Set up log interception by monkey patching Log class"""
+        """通过monkey修补log类设置日志拦截"""
         original_info = Log.info
         original_success = Log.success
         original_error = Log.error
         original_debug = Log.debug
         original_warn = Log.warn
 
-        # Try to import DebugLogger
+        # 尝试导入DebugLogger
         try:
             from src.libs.debug_logger import DebugLogger
             has_debug_logger = True
@@ -160,20 +158,15 @@ class LogManagerMixin:
             has_debug_logger = False
 
         def patched_info(message):
-            # Redirect to GUI instead of terminal
-            # original_info(message)
             self.log_handler.emit_log(message)
             if has_debug_logger and Log.is_debug_mode():
                 DebugLogger.log_info(message)
 
         def patched_success(message):
-            # Redirect to GUI instead of terminal
-            # original_success(message)
             self.log_handler.emit_log(message)
             if has_debug_logger and Log.is_debug_mode():
                 DebugLogger.log_info(message)
             if "下载完成" in message:
-                # Ensure progress bar is at maximum on completion
                 if hasattr(self, 'progress_bar'):
                     self.log_handler.progress_signal.emit(
                         self.progress_bar.maximum(),
@@ -181,23 +174,17 @@ class LogManagerMixin:
                     )
 
         def patched_error(message, detailed=False):
-            # Redirect to GUI instead of terminal
-            # original_error(message, detailed)
             self.log_handler.emit_log(f"错误: {message}")
             if has_debug_logger and Log.is_debug_mode():
                 DebugLogger.log_error(message)
 
         def patched_debug(message):
-            # Redirect to GUI instead of terminal
-            # original_debug(message)
             if Log.is_debug_mode():
                 self.log_handler.emit_log(f"调试: {message}")
                 if has_debug_logger:
                     DebugLogger.log_debug(message)
 
         def patched_warn(message, detailed=False):
-            # Redirect to GUI instead of terminal
-            # original_warn(message, detailed)
             self.log_handler.emit_log(f"警告: {message}")
             if has_debug_logger and Log.is_debug_mode():
                 DebugLogger.log_warning(message)

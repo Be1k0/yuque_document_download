@@ -11,7 +11,7 @@ from ..libs.constants import (
 from ..libs.file import File
 from ..libs.log import Log
 from ..libs.tools import (
-    get_local_cookies, get_cache_books_info,  # get_user_config已移除
+    get_local_cookies, get_cache_books_info, 
     format_filename, ensure_dir_exists
 )
 
@@ -57,7 +57,6 @@ class Scheduler:
             login_result = await YuqueApi.login(account.username, account.password)
             if login_result:
                 Log.success("登录成功!")
-                # 接着就开始获取知识库
                 books_result = await YuqueApi.get_user_bookstacks()
                 if books_result:
                     Log.success("获取知识库成功")
@@ -77,10 +76,7 @@ class Scheduler:
     async def _handle_inquiry() -> None:
         """处理用户询问"""
         try:
-            # 询问用户选择
             answer = inquiry.ask_user_toc_options()
-
-            # 开始下载任务
             await Scheduler._start_download_task(answer)
 
         except Exception as e:
@@ -132,10 +128,8 @@ class Scheduler:
             book_dir = os.path.join(output_dir, format_filename(book.name))
             ensure_dir_exists(book_dir)
 
-            # 构建namespace
             namespace = ""
 
-            # 检查是否已有namespace字段
             if hasattr(book, 'namespace') and book.namespace:
                 namespace = book.namespace
             # 如果没有namespace，就从其他字段构建
