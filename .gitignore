@@ -179,3 +179,4 @@ pyrightconfig.json
 debug_logs/
 
 pyvenv.cfg
+file_version_info.txt
