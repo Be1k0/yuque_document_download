@@ -180,3 +180,5 @@ debug_logs/
 
 pyvenv.cfg
 file_version_info.txt
+upx.exe
+docs/
