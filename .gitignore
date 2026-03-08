@@ -182,3 +182,5 @@ pyvenv.cfg
 file_version_info.txt
 upx.exe
 docs/
+doc/
+build.py
