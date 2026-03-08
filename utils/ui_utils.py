@@ -1,57 +1,57 @@
-import os
 import sys
 from io import StringIO
-from PyQt5.QtCore import Qt, pyqtSignal, QMetaObject, Q_ARG, QObject, QSize, QRect, QPoint
-from PyQt5.QtGui import QPixmap, QPainter, QPainterPath
-from PyQt5.QtWidgets import QLayout, QLineEdit, QApplication
-
+from PyQt6.QtCore import Qt, pyqtSignal, QMetaObject, Q_ARG, QObject, QSize, QRect, QPoint
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
+from PyQt6.QtWidgets import QLayout, QLineEdit, QApplication
+from src.libs.path_utils import get_resource_path, get_bundled_resource_path
+    
 def resource_path(relative_path):
-    """获取用户数据文件的绝对路径，兼容PyInstaller打包"""
-    if hasattr(sys, '_MEIPASS'):
-        # PyInstaller打包后，使用可执行文件所在目录
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # 开发环境，使用当前脚本所在目录
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_path, relative_path)
+    """获取用户数据文件的绝对路径
+    
+    Args:
+        relative_path: 相对于资源目录的路径
+    """
+    return get_resource_path(relative_path)
 
 
 def static_resource_path(relative_path):
-    """获取静态资源文件的绝对路径，兼容PyInstaller打包"""
-    if hasattr(sys, '_MEIPASS'):
-        # PyInstaller打包后，静态资源在临时目录中
-        return os.path.join(sys._MEIPASS, relative_path)
-    else:
-        # 开发环境，使用当前脚本所在目录的父目录（因为现在在utils下）
-        return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path)
+    """获取静态资源文件的绝对路径
+    
+    Args:
+        relative_path: 相对于资源目录的路径
+    """
+    return get_bundled_resource_path(relative_path)
 
 
 def create_circular_pixmap(pixmap, size):
-    """创建圆形头像"""
+    """创建圆形头像
+    
+    Args:
+        pixmap: 原始图像
+        size: 圆形大小
+    """
     # 创建一个正方形的透明图像
     circular_pixmap = QPixmap(size, size)
-    circular_pixmap.fill(Qt.transparent)
+    circular_pixmap.fill(Qt.GlobalColor.transparent)
 
-    # 创建画家对象
     painter = QPainter(circular_pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-    # 创建圆形路径
     path = QPainterPath()
     path.addEllipse(0, 0, size, size)
 
-    # 设置裁剪路径
     painter.setClipPath(path)
 
-    # 绘制原始图像
     painter.drawPixmap(0, 0, size, size, pixmap)
     painter.end()
 
     return circular_pixmap
 
-
-# 自定义FlowLayout布局，实现自适应排列
 class FlowLayout(QLayout):
+    """自定义FlowLayout布局类，实现自适应排列
+    
+    参考：https://doc.qt.io/qt-6/qtwidgets-layouts-flowlayout-example.html
+    """
     def __init__(self, parent=None, margin=0, spacing=-1):
         super(FlowLayout, self).__init__(parent)
 
@@ -67,39 +67,62 @@ class FlowLayout(QLayout):
             item = self.takeAt(0)
 
     def addItem(self, item):
+
+        """向项目列表中添加一个新的项目
+        
+        Args:
+            item: 要添加到列表中的项目
+        """
         self.itemList.append(item)
 
     def count(self):
+        """返回项目列表中的项目数量"""
         return len(self.itemList)
 
     def itemAt(self, index):
+        """返回指定索引处的项目"""
         if 0 <= index < len(self.itemList):
             return self.itemList[index]
         return None
 
     def takeAt(self, index):
+        """从项目列表中移除并返回指定索引处的项目"""
         if 0 <= index < len(self.itemList):
             return self.itemList.pop(index)
         return None
 
     def expandingDirections(self):
-        return Qt.Orientations(Qt.Orientation(0))
+        """返回扩展方向"""
+        return Qt.Orientations(0)
 
     def hasHeightForWidth(self):
+        """检查布局是否具有高度以适应宽度"""
         return True
 
     def heightForWidth(self, width):
+        """根据给定的宽度计算布局所需的高度
+        
+         Args:
+            width: 布局的宽度
+        """
         height = self.doLayout(QRect(0, 0, width, 0), True)
         return height
 
     def setGeometry(self, rect):
+        """设置布局的几何形状，并根据给定的矩形调整子项的位置和大小
+        
+        Args:
+            rect: 布局的矩形
+        """
         super(FlowLayout, self).setGeometry(rect)
         self.doLayout(rect, False)
 
     def sizeHint(self):
+        """返回布局的推荐大小"""
         return self.minimumSize()
 
     def minimumSize(self):
+        """计算并返回布局的最小大小"""
         size = QSize()
 
         for item in self.itemList:
@@ -110,6 +133,12 @@ class FlowLayout(QLayout):
         return size
 
     def doLayout(self, rect, testOnly):
+        """执行布局计算和调整子项的位置和大小
+
+        Args:
+            rect: 布局的矩形
+            testOnly: 如果为True，则仅计算布局所需的高度，而不调整子项的位置和大小
+        """
         x = rect.x()
         y = rect.y()
         lineHeight = 0
@@ -119,11 +148,11 @@ class FlowLayout(QLayout):
             spaceX = self.spacing() + wid.style().layoutSpacing(
                 wid.sizePolicy().controlType(),
                 wid.sizePolicy().controlType(),
-                Qt.Horizontal)
+                Qt.Orientation.Horizontal)
             spaceY = self.spacing() + wid.style().layoutSpacing(
                 wid.sizePolicy().controlType(),
                 wid.sizePolicy().controlType(),
-                Qt.Vertical)
+                Qt.Orientation.Vertical)
 
             nextX = x + item.sizeHint().width() + spaceX
             if nextX - spaceX > rect.right() and lineHeight > 0:
@@ -141,8 +170,8 @@ class FlowLayout(QLayout):
         return y + lineHeight - rect.y()
 
 
-# 重定向stdout和stderr到GUI
 class StdoutRedirector(StringIO):
+    """重定向stdout和stderr到GUI文本框的类"""
     def __init__(self, text_widget, disable_terminal_output=True):
         super().__init__()
         self.text_widget = text_widget
@@ -152,10 +181,14 @@ class StdoutRedirector(StringIO):
         self.disable_terminal_output = disable_terminal_output
 
     def write(self, text):
+        """重写write方法，将输出文本添加到缓冲区并刷新文本框
+        
+         Args:
+            text: 要写入的文本
+        """
         if not self.disable_terminal_output:
             self.old_stdout.write(text)
 
-        # 添加到缓冲区
         self.buffer += text
 
         # 如果包含换行符或缓冲区超过一定大小，则刷新
@@ -163,33 +196,37 @@ class StdoutRedirector(StringIO):
             self.flush()
 
     def flush(self):
+        """刷新缓冲区，将缓冲区内容写入文本框"""
         if self.buffer:
-            # 使用主线程安全的方式更新UI
             if QApplication.instance():
                 QMetaObject.invokeMethod(
                     self.text_widget,
                     "append",
-                    Qt.QueuedConnection,
+                    Qt.ConnectionType.QueuedConnection,
                     Q_ARG(str, self.buffer)
                 )
             self.buffer = ""
         if not self.disable_terminal_output and hasattr(self.old_stdout, 'flush'):
             self.old_stdout.flush()
 
-
-# 为密码输入创建自定义QPasswordLineEdit类
 class QPasswordLineEdit(QLineEdit):
+    """自定义密码输入框类"""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setEchoMode(QLineEdit.Password)
+        self.setEchoMode(QLineEdit.EchoMode.Password)
 
 
 # 自定义记录器信号处理程序
 class LogSignalHandler(QObject):
+    """日志信号处理器类，用于处理和发射日志信号和进度信号"""
     log_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int)
-
     def emit_log(self, message):
+        """发射日志信号，并检查是否包含下载进度消息
+        
+         Args:
+            message: 日志消息
+        """
         self.log_signal.emit(message)
 
         # 检查文档下载进度消息

@@ -1,28 +1,30 @@
 import sys
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QCheckBox, QListWidget, QGroupBox, 
-    QLineEdit, QProgressBar, QTextEdit, QTabWidget, QSplitter, QSizePolicy
+    QLineEdit, QProgressBar, QTabWidget, QSplitter, QSizePolicy, QAbstractItemView
 )
-from PyQt5.QtGui import QFont, QIcon
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import Qt, pyqtSignal
 from src.libs.constants import GLOBAL_CONFIG
 from utils import static_resource_path, StdoutRedirector, QPasswordLineEdit
-from .login_manager import LoginManagerMixin
-from .book_manager import BookManagerMixin
-from .article_manager import ArticleManagerMixin, ArticleListWidget
-from .export_manager import ExportManagerMixin
-from .log_manager import LogManagerMixin
-from .settings_manager import SettingsManagerMixin
+from .components.login_manager import LoginManagerMixin
+from .components.book_manager import BookManagerMixin
+from .components.article_manager import ArticleManagerMixin, ArticleTreeWidget
+from .components.export_manager import ExportManagerMixin
+from .components.log_manager import LogManagerMixin
+from .components.settings_manager import SettingsManagerMixin
+from .components.custom_url_manager import CustomUrlManagerMixin
 
 class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerMixin, 
-               ExportManagerMixin, LogManagerMixin, SettingsManagerMixin):
+               ExportManagerMixin, LogManagerMixin, SettingsManagerMixin, CustomUrlManagerMixin):
     # 用于安全更新日志文本框的信号
     appendLogSignal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("语雀知识库导出工具")
+        from main import __version__
+        self.setWindowTitle(f"语雀知识库导出工具 {__version__} By Be1k0")
 
         # 响应式窗口大小设置
         screen = QApplication.primaryScreen().geometry()
@@ -30,22 +32,22 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         screen_height = screen.height()
 
         # 根据屏幕分辨率自适应窗口大小
-        if screen_width >= 1920:  # 高分辨率屏幕
+        if screen_width >= 1920:
             window_width = 1400
             window_height = 800  
             min_width = 900
             min_height = 600  
-        elif screen_width >= 1366:  # 中等分辨率屏幕
+        elif screen_width >= 1366:
             window_width = 1200
             window_height = 700  
             min_width = 800
             min_height = 550  
-        elif screen_width >= 1024:  # 小分辨率屏幕
+        elif screen_width >= 1024:
             window_width = min(1000, int(screen_width * 0.95))
             window_height = min(650, int(screen_height * 0.8))  
             min_width = 700
             min_height = 480  
-        else:  # 极小分辨率屏幕
+        else:
             window_width = min(800, int(screen_width * 0.98))
             window_height = min(550, int(screen_height * 0.85))  
             min_width = 600
@@ -58,24 +60,22 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.setGeometry(x, y, window_width, window_height)
         self.setMinimumSize(min_width, min_height)
 
-        # 设置应用程序图标为当前目录下的icon.ico文件
+        # 设置应用程序图标
         self.setWindowIcon(QIcon(static_resource_path('favicon.ico')))
 
         # 初始化设置变量
-        self.download_threads = 5  # 默认下载线程数
+        self.download_threads = 10  # 默认下载线程数
         self.doc_image_prefix = ''  # 文档图片前缀
         self.image_rename_mode = 'asc'  # 图片重命名模式
         self.image_file_prefix = 'image-'  # 图片文件前缀
         self.yuque_cdn_domain = 'cdn.nlark.com'  # 语雀CDN域名
         self.enable_debug = False  # 调试模式
-
-        # 应用样式表
-        self.apply_stylesheet()
+        self.disable_ssl = GLOBAL_CONFIG.disable_ssl # 禁用SSL验证
 
         # 初始化用户界面
         self.init_ui()
 
-        # 初始化日志管理器 (LogManagerMixin)
+        # 初始化日志管理器
         self.init_log_manager()
 
         # 设置日志重定向
@@ -83,386 +83,33 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         sys.stdout = self.redirector
         sys.stderr = self.redirector
 
-        # 检查Cookie (LoginManagerMixin)
+        # 检查Cookie
         self.check_login_status()
-
-    def apply_stylesheet(self):
-        """样式表"""
-        stylesheet = """
-            QMainWindow, QWidget {
-            background-color: #f8f9fa;
-            color: #212529;
-        }
-        
-        QTabWidget::pane {
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            background-color: #ffffff;
-            top: -1px;
-        }
-        
-        QTabBar {
-            border-bottom: none;
-        }
-        
-        QTabBar::tab {
-            background-color: #e9ecef;
-            color: #495057;
-            padding: 8px 16px;
-            border: 1px solid #dee2e6;
-            border-bottom: none;
-            border-top-left-radius: 4px;
-            border-top-right-radius: 4px;
-            margin-right: 2px;
-            outline: none;
-        }
-        
-        QTabBar::tab:selected {
-            background-color: #ffffff;
-            color: #0d6efd;
-            border-bottom: none;
-            outline: none;
-        }
-        
-        QTabBar::tab:hover:!selected {
-            background-color: #dee2e6;
-        }
-        
-        QTabBar::tab:focus {
-            outline: none;
-        }
-        
-        QTabBar::focus {
-            outline: none;
-        }
-        
-        QPushButton {
-            background-color: #0d6efd;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 6px 12px;
-            min-width: 80px;
-            outline: none;
-        }
-        
-        QPushButton:focus {
-            outline: none;
-        }
-        
-        QPushButton:hover {
-            background-color: #0b5ed7;
-        }
-        
-        QPushButton:pressed {
-            background-color: #0a58ca;
-        }
-        
-        QPushButton:disabled {
-            background-color: #6c757d;
-            color: #e9ecef;
-        }
-        
-        QLineEdit, QTextEdit {
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            padding: 6px;
-            background-color: white;
-            outline: none;
-        }
-        
-        QLineEdit:focus, QTextEdit:focus {
-            border: 1px solid #0d6efd;
-            outline: none;
-        }
-        
-        /* 更新列表框样式 */
-        QListWidget {
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            padding: 2px;
-            background-color: white;
-            outline: none;
-            selection-background-color: transparent;
-        }
-        
-        QListWidget:focus {
-            outline: none;
-        }
-        
-        QListWidget::item {
-            height: 30px;
-            padding-left: 5px;
-            border-radius: 4px;
-            margin: 2px;
-            padding: 5px;
-            border: 1px solid transparent;
-        }
-        
-        QListWidget::item:hover {
-            background-color: #f0f7ff;
-            border: 1px solid #e7f3ff;
-        }
-        
-        QListWidget::item:selected {
-            background-color: #e7f3ff;
-            color: #0d6efd;
-            border: 1px solid #0d6efd;
-            border-radius: 4px;
-        }
-        
-        QProgressBar {
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            background-color: #e9ecef;
-            text-align: center;
-            height: 24px;
-            font-size: 13px;
-            font-weight: bold;
-            color: white;
-        }
-        
-        QProgressBar::chunk {
-            background-color: #0d6efd;
-            border-radius: 3px;
-        }
-        
-        QCheckBox {
-            spacing: 8px;
-            font-size: 13px;
-            min-height: 20px;
-            padding: 0;
-            margin: 0;
-            outline: none;
-        }
-        
-        QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            outline: none;
-        }
-        
-        QCheckBox:focus {
-            outline: none;
-        }
-        
-        QCheckBox::indicator:focus {
-            outline: none;
-        }
-        
-
-        QGroupBox {
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            margin-top: 16px;
-            padding-top: 16px;
-        }
-        
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px;
-            color: #495057;
-        }
-        
-        QLabel {
-            color: #212529;
-        }
-        
-        /* 下拉框样式 */
-        QComboBox {
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            padding: 6px 12px;
-            background-color: white;
-            color: #212529;
-            font-size: 13px;
-            min-width: 120px;
-            min-height: 20px;
-        }
-        
-        QComboBox:hover {
-            border: 1px solid #0d6efd;
-            background-color: #f8f9ff;
-        }
-        
-        QComboBox:focus {
-            border: 1px solid #0d6efd;
-            background-color: white;
-        }
-        
-        QComboBox::drop-down {
-            subcontrol-origin: padding;
-            subcontrol-position: top right;
-            width: 20px;
-            border-left-width: 1px;
-            border-left-color: #ced4da;
-            border-left-style: solid;
-            border-top-right-radius: 4px;
-            border-bottom-right-radius: 4px;
-            background-color: #f8f9fa;
-        }
-        
-        QComboBox::drop-down:hover {
-            background-color: #e9ecef;
-            border-left-color: #0d6efd;
-        }
-        
-        QComboBox::down-arrow {
-            image: none;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 6px solid #6c757d;
-            width: 0;
-            height: 0;
-        }
-        
-        QComboBox::down-arrow:hover {
-            border-top-color: #0d6efd;
-        }
-        
-        QComboBox QAbstractItemView {
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            background-color: white;
-            selection-background-color: #e7f3ff;
-            selection-color: #0d6efd;
-            outline: none;
-            padding: 2px;
-        }
-        
-        QComboBox QAbstractItemView::item {
-            height: 28px;
-            padding: 4px 8px;
-            border-radius: 2px;
-            margin: 1px;
-        }
-        
-        QComboBox QAbstractItemView::item:hover {
-            background-color: #f0f7ff;
-            color: #0d6efd;
-        }
-        
-        QComboBox QAbstractItemView::item:selected {
-            background-color: #e7f3ff;
-            color: #0d6efd;
-        }
-        
-        QSplitter::handle {
-            background-color: #dee2e6;
-            height: 1px;
-        }
-        
-        QSplitter::handle:hover {
-            background-color: #0d6efd;
-        }
-        
-        /* 滚动条样式 */
-        QScrollBar:vertical {
-            border: none;
-            background: #f1f3f5;
-            width: 10px;
-            margin: 0px 0px 0px 0px;
-            border-radius: 5px;
-        }
-        
-        QScrollBar::handle:vertical {
-            background: #adb5bd;
-            min-height: 20px;
-            border-radius: 5px;
-        }
-        
-        QScrollBar::handle:vertical:hover {
-            background: #6c757d;
-        }
-        
-        QScrollBar::add-line:vertical,
-        QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
-        
-        QScrollBar::add-page:vertical,
-        QScrollBar::sub-page:vertical {
-            background: none;
-        }
-        
-        QScrollBar:horizontal {
-            border: none;
-            background: #f1f3f5;
-            height: 10px;
-            margin: 0px 0px 0px 0px;
-            border-radius: 5px;
-        }
-        
-        QScrollBar::handle:horizontal {
-            background: #adb5bd;
-            min-width: 20px;
-            border-radius: 5px;
-        }
-        
-        QScrollBar::handle:horizontal:hover {
-            background: #6c757d;
-        }
-        
-        QScrollBar::add-line:horizontal,
-        QScrollBar::sub-line:horizontal {
-            width: 0px;
-        }
-        
-        QScrollBar::add-page:horizontal,
-        QScrollBar::sub-page:horizontal {
-            background: none;
-        }
-        """
-        self.setStyleSheet(stylesheet)
 
     def closeEvent(self, event):
         """当窗口关闭时恢复标准输出流"""
         if hasattr(self, 'redirector'):
-            # 确保刷新缓冲区
             self.redirector.flush()
-            # 恢复标准流
             sys.stdout = self.redirector.old_stdout
             sys.stderr = self.redirector.old_stderr
         super().closeEvent(event)
     
     def on_tab_changed(self, index):
         """标签页切换时的处理"""
-        # 仅在知识库选择页显示进度条
-        self.progress_widget.setVisible(index == self.selection_tab_index)
+        show_progress = (index == self.selection_tab_index) or (index == self.selection_tab_index + 1)
+        self.progress_widget.setVisible(show_progress)
 
     def init_ui(self):
-        # Main container
+        # 主界面布局
         central_widget = QWidget()
+        central_widget.setObjectName("CentralWidget")
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
-        # Banner/Header
-        header_widget = QWidget()
-        header_layout = QVBoxLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(5)
-
-        header_label = QLabel("语雀知识库导出工具")
-        header_label.setAlignment(Qt.AlignCenter)
-        header_font = QFont()
-        header_font.setBold(True)
-        header_font.setPointSize(16)
-        header_label.setFont(header_font)
-        header_label.setStyleSheet("color: #0d6efd;")
-        header_layout.addWidget(header_label)
-
-        subtitle_label = QLabel("支持一键导出语雀知识库所有文档")
-        subtitle_label.setAlignment(Qt.AlignCenter)
-        subtitle_label.setStyleSheet("color: #495057; margin-bottom: 10px;")
-        header_layout.addWidget(subtitle_label)
-
-        main_layout.addWidget(header_widget)
-
         # 创建主分割器
-        main_splitter = QSplitter(Qt.Vertical)
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
         main_layout.addWidget(main_splitter, 1) 
 
         # 上半部分 - 操作区域
@@ -473,15 +120,6 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 创建Tab小部件
         tabs = QTabWidget()
-        tabs.setDocumentMode(True)
-        tabs.setStyleSheet("""
-            QTabWidget::tab-bar {
-                alignment: center;
-            }
-            QTabWidget::pane {
-                border-top: 0px;
-            }
-        """)
 
         # 登录表单页
         login_page = QWidget()
@@ -512,37 +150,17 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         password_layout.addWidget(password_label)
         password_layout.addWidget(self.password_input)
         login_form_layout.addLayout(password_layout)
-
-        # 添加一些间距
         login_form_layout.addSpacing(10)
 
         self.login_button = QPushButton("登录")
         self.login_button.setMinimumHeight(36)
         self.login_button.clicked.connect(self.login)
         login_form_layout.addWidget(self.login_button)
-
-        # 添加一些间距
         login_form_layout.addSpacing(5)
 
         self.web_login_button = QPushButton("网页端登录")
         self.web_login_button.setMinimumHeight(36)
-        self.web_login_button.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-            QPushButton:pressed {
-                background-color: #545b62;
-            }
-            QPushButton:focus {
-                outline: none;
-            }
-        """)
+        self.web_login_button.setObjectName("SecondaryButton")
         self.web_login_button.clicked.connect(self.web_login)
         login_form_layout.addWidget(self.web_login_button)
 
@@ -551,7 +169,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         login_help = QLabel("请输入您的语雀账号和密码进行登录，或使用网页端登录。登录信息仅用于获取知识库数据，不会被发送到第三方。")
         login_help.setWordWrap(True)
-        login_help.setStyleSheet("color: #6c757d; padding: 10px;")
+        login_help.setProperty("class", "help-text")
         login_layout.addWidget(login_help)
 
         # 用户信息组（已登录时显示）
@@ -566,56 +184,29 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 头像标签
         self.avatar_label = QLabel()
         self.avatar_label.setFixedSize(80, 80)
-        self.avatar_label.setStyleSheet("""
-            QLabel {
-                border: 2px solid #ddd;
-                border-radius: 40px;
-                background-color: #f8f9fa;
-            }
-        """)
-        self.avatar_label.setAlignment(Qt.AlignCenter)
+        self.avatar_label.setObjectName("AvatarLabel")
+        self.avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.avatar_label.setScaledContents(True)
         user_header_layout.addWidget(self.avatar_label)
 
         # 用户信息
         user_details_layout = QVBoxLayout()
-
         self.user_name_label = QLabel("用户名: --")
-        self.user_name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
+        self.user_name_label.setObjectName("UserNameLabel")
         user_details_layout.addWidget(self.user_name_label)
 
         self.user_id_label = QLabel("用户ID: --")
-        self.user_id_label.setStyleSheet("color: #666;")
+        self.user_id_label.setObjectName("UserIdLabel")
         user_details_layout.addWidget(self.user_id_label)
-
         user_header_layout.addLayout(user_details_layout)
         user_header_layout.addStretch()
-
         user_info_layout.addLayout(user_header_layout)
 
         # 注销按钮
         user_info_layout.addSpacing(10)
         self.logout_button = QPushButton("注销")
         self.logout_button.setMinimumHeight(36)
-        self.logout_button.setStyleSheet("""
-            QPushButton {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-            outline: none;
-        }
-        QPushButton:hover {
-            background-color: #c82333;
-        }
-        QPushButton:pressed {
-            background-color: #bd2130;
-        }
-        QPushButton:focus {
-            outline: none;
-        }
-        """)
+        self.logout_button.setObjectName("DangerButton")
         self.logout_button.clicked.connect(self.logout)
         user_info_layout.addWidget(self.logout_button)
 
@@ -625,46 +216,45 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 默认隐藏用户信息组
         self.user_info_group.hide()
 
-        login_layout.addStretch(1)  # Add stretch to push content up
+        login_layout.addStretch(1)
 
         # 知识库选择页
         selection_page = QWidget()
         selection_layout = QVBoxLayout(selection_page)
-        selection_layout.setContentsMargins(10, 10, 10, 10)  # 优化边距
-        selection_layout.setSpacing(12)  # 优化间距
+        selection_layout.setContentsMargins(10, 10, 10, 10)
+        selection_layout.setSpacing(12)
 
         # 添加状态标签
         self.status_label = QLabel("准备就绪")
-        self.status_label.setStyleSheet("color: #0d6efd; font-weight: bold;")
+        self.status_label.setObjectName("StatusLabel")
         selection_layout.addWidget(self.status_label)
 
         # 水平布局将三个部分分开
         selection_horizontal = QHBoxLayout()
-        selection_horizontal.setSpacing(15)  # 优化面板间距
+        selection_horizontal.setSpacing(15)
         selection_layout.addLayout(selection_horizontal)
 
         # 左侧：知识库列表
         left_panel = QGroupBox("知识库列表")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(10, 15, 10, 15)  # 优化边距
-        left_layout.setSpacing(10)  # 优化间距
+        left_layout.setContentsMargins(10, 15, 10, 15)
+        left_layout.setSpacing(10)
 
         # 搜索框
         search_layout = QHBoxLayout()
-        search_layout.setSpacing(8)  # 优化搜索框组件间距
+        search_layout.setSpacing(8)
         search_label = QLabel("搜索:")
         search_label.setMinimumWidth(50)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("输入关键词过滤知识库")
         self.search_input.textChanged.connect(self.filter_books)
-        self.search_input.setStyleSheet("font-size: 13px;")
         search_layout.addWidget(search_label)
         search_layout.addWidget(self.search_input)
         left_layout.addLayout(search_layout)
 
         # 知识库列表
         self.book_list = QListWidget()
-        self.book_list.setSelectionMode(QListWidget.MultiSelection)
+        self.book_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
         self.book_list.setMinimumHeight(120)  
         self.book_list.setMinimumWidth(200) 
         left_layout.addWidget(self.book_list)
@@ -680,29 +270,13 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.select_all_books_btn = QPushButton("全选")
         self.select_all_books_btn.setMinimumHeight(30)  
         self.select_all_books_btn.setMaximumHeight(34)  
-        self.select_all_books_btn.setStyleSheet("font-size: 13px;")
         self.select_all_books_btn.clicked.connect(self.select_all_books)
         select_buttons_layout.addWidget(self.select_all_books_btn)
 
         self.deselect_all_books_btn = QPushButton("取消选择")
         self.deselect_all_books_btn.setMinimumHeight(30)  
         self.deselect_all_books_btn.setMaximumHeight(34)  
-        self.deselect_all_books_btn.setStyleSheet("""
-            QPushButton {
-                font-size: 13px;
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-            }
-            QPushButton:hover {
-                background-color: #5c636a;
-            }
-            QPushButton:pressed {
-                background-color: #495057;
-            }
-        """)
+        self.deselect_all_books_btn.setObjectName("SecondaryButton")
         self.deselect_all_books_btn.clicked.connect(self.deselect_all_books)
         select_buttons_layout.addWidget(self.deselect_all_books_btn)
 
@@ -711,8 +285,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 第二行：已选数量标签
         count_layout = QHBoxLayout()
         self.selected_count_label = QLabel("已选: 0")
-        self.selected_count_label.setAlignment(Qt.AlignCenter)
-        self.selected_count_label.setStyleSheet("color: #0d6efd; font-weight: bold; font-size: 14px;")
+        self.selected_count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         count_layout.addWidget(self.selected_count_label)
 
         buttons_layout.addLayout(count_layout)
@@ -735,13 +308,12 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.article_search_input = QLineEdit()
         self.article_search_input.setPlaceholderText("输入关键词过滤文章")
         self.article_search_input.textChanged.connect(self.filter_articles)
-        self.article_search_input.setStyleSheet("font-size: 13px;")
         article_search_layout.addWidget(article_search_label)
         article_search_layout.addWidget(self.article_search_input)
         center_layout.addLayout(article_search_layout)
 
         # 文章列表
-        self.article_list = ArticleListWidget()
+        self.article_list = ArticleTreeWidget()
         self.article_list.itemSelectionChanged.connect(self.update_article_selection)
         center_layout.addWidget(self.article_list)
 
@@ -756,29 +328,13 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.select_all_articles_btn = QPushButton("全选文章")
         self.select_all_articles_btn.setMinimumHeight(30)  
         self.select_all_articles_btn.setMaximumHeight(34)  
-        self.select_all_articles_btn.setStyleSheet("font-size: 13px;")
         self.select_all_articles_btn.clicked.connect(self.select_all_articles)
         article_buttons_layout.addWidget(self.select_all_articles_btn)
 
         self.deselect_all_articles_btn = QPushButton("取消选择")
         self.deselect_all_articles_btn.setMinimumHeight(30)  
         self.deselect_all_articles_btn.setMaximumHeight(34)  
-        self.deselect_all_articles_btn.setStyleSheet("""
-            QPushButton {
-                font-size: 13px;
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-            }
-            QPushButton:hover {
-                background-color: #5c636a;
-            }
-            QPushButton:pressed {
-                background-color: #495057;
-            }
-        """)
+        self.deselect_all_articles_btn.setObjectName("SecondaryButton")
         self.deselect_all_articles_btn.clicked.connect(self.deselect_all_articles)
         article_buttons_layout.addWidget(self.deselect_all_articles_btn)
 
@@ -787,8 +343,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 第二行：已选数量标签
         article_count_layout = QHBoxLayout()
         self.selected_article_count_label = QLabel("已选: 0")
-        self.selected_article_count_label.setAlignment(Qt.AlignCenter)
-        self.selected_article_count_label.setStyleSheet("color: #0d6efd; font-weight: bold; font-size: 14px;")
+        self.selected_article_count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         article_count_layout.addWidget(self.selected_article_count_label)
 
         article_control_layout.addLayout(article_count_layout)
@@ -827,33 +382,16 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.download_images_checkbox.setStyleSheet("font-size: 12px; padding: 3px 0; margin: 0 0 2px 0;")  
         options_layout.addWidget(self.download_images_checkbox)
 
-        # 输出目录设置 - 改进的垂直布局
+        # 输出目录设置
         output_label = QLabel("输出目录:")
         output_label.setStyleSheet("font-weight: bold; font-size: 12px; margin: 0 0 2px 0;")  
         options_layout.addWidget(output_label)
         
         self.output_input = QLineEdit()
         self.output_input.setReadOnly(True)
-        self.output_input.setStyleSheet("""
-            QLineEdit {
-                font-size: 11px;
-                padding: 4px 8px;
-                min-height: 26px;
-                max-height: 26px;
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                background-color: white;
-                selection-background-color: #0d6efd;
-                selection-color: white;
-            }
-            QLineEdit:focus {
-                border-color: #0d6efd;
-                outline: none;
-            }
-        """)
         self.output_input.setMinimumHeight(26)  
         self.output_input.setMaximumHeight(26)  
-        self.output_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  
+        self.output_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  
         self.output_input.setToolTip(GLOBAL_CONFIG.target_output_dir)  
         self.output_input.setCursorPosition(0)  
         options_layout.addWidget(self.output_input)
@@ -864,24 +402,8 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         output_button = QPushButton("选择")
         output_button.setMinimumHeight(26)  
         output_button.setMaximumHeight(26)  
-        output_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  
-        output_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0d6efd;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #0b5ed7;
-            }
-            QPushButton:pressed {
-                background-color: #0a58ca;
-            }
-        """)
+        output_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  
+        output_button.setObjectName("SecondaryButton")
         output_button.clicked.connect(self.select_output_dir)
         
         options_layout.addWidget(output_button)
@@ -898,50 +420,15 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 开始导出按钮
         self.export_button = QPushButton("开始导出")
-        self.export_button.setMinimumHeight(36)  
-        self.export_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0d6efd;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #0b5ed7;
-            }
-            QPushButton:pressed {
-                background-color: #0a58ca;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.export_button.setMinimumHeight(36)
+        self.export_button.setObjectName("PrimaryButton")
         self.export_button.clicked.connect(self.start_export)
         export_actions_layout.addWidget(self.export_button)
 
         # 清除缓存按钮
         self.clean_button = QPushButton("清理缓存")
-        self.clean_button.setMinimumHeight(32)  
-        self.clean_button.setStyleSheet("""
-            QPushButton {
-                background-color: #dc3545;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #c82333;
-            }
-            QPushButton:pressed {
-                background-color: #bd2130;
-            }
-        """)
+        self.clean_button.setMinimumHeight(32)
+        self.clean_button.setObjectName("DangerButton")
         self.clean_button.clicked.connect(self.clean_cache)
         export_actions_layout.addWidget(self.clean_button)
 
@@ -958,15 +445,16 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 关于页面
         about_page = self.create_about_page()
 
+        # 公开知识库导出页
+        custom_url_page = self.init_custom_url_ui()
+
         # 添加标签页
         tabs.addTab(login_page, "登录")
-        self.selection_tab_index = tabs.addTab(selection_page, "知识库选择")
+        self.selection_tab_index = tabs.addTab(selection_page, "知识库导出")
+        tabs.addTab(custom_url_page, "公开知识库导出")
         tabs.addTab(settings_page, "设置")
-        
-        # 创建并添加日志页面
         log_page = self.create_log_page()
         tabs.addTab(log_page, "运行日志")
-        
         tabs.addTab(about_page, "关于")
 
         # 连接标签页切换信号
@@ -991,24 +479,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("已导出: %v/%m (%p%)")
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                text-align: center;
-                color: #212529;
-                font-weight: bold;
-                font-size: 13px;
-                background-color: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 6px;
-                height: 30px;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #0d6efd, stop:1 #0b5ed7);
-                border-radius: 4px;
-                margin: 1px;
-            }
-        """)
+        self.progress_bar.setObjectName("ExportProgressBar")
         progress_layout.addWidget(self.progress_bar)
 
         main_layout.addWidget(self.progress_widget)
@@ -1016,7 +487,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 默认隐藏进度条，仅在知识库选择页显示
         self.progress_widget.setVisible(False)
 
-        copyright_label = QLabel("Copyright © 2025 By Be1k0 | https://github.com/Be1k0")
-        copyright_label.setAlignment(Qt.AlignCenter)
-        copyright_label.setStyleSheet("color: #6c757d; padding: 5px;")
+        copyright_label = QLabel("Copyright © 2025-2026 By Be1k0")
+        copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        copyright_label.setObjectName("CopyrightLabel")
         main_layout.addWidget(copyright_label)

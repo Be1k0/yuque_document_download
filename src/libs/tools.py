@@ -3,14 +3,12 @@ import os
 import time
 from pathlib import Path
 from typing import Optional, List
-
 from .constants import (
-    GLOBAL_CONFIG, LocalCookiesInfo,  # UserCliConfig已移除
+    GLOBAL_CONFIG, LocalCookiesInfo,
     LocalCacheUserInfo, YuqueLoginUserInfo, BookItem
 )
 from .file import File
 from .log import Log
-
 
 def gen_timestamp() -> int:
     """生成当前时间戳（毫秒）"""
@@ -56,7 +54,7 @@ def get_cache_books_info() -> Optional[List[BookItem]]:
             for book_dict in books_info_list:
                 # 处理docs字段
                 docs_data = book_dict.get('docs', [])
-                book_dict['docs'] = docs_data  # 保持原始数据结构
+                book_dict['docs'] = docs_data
                 books.append(BookItem(**book_dict))
             return books
         except Exception:
@@ -88,7 +86,12 @@ def is_personal() -> bool:
 
 
 def save_cookies(cookies: str, expire_time: Optional[int] = None) -> bool:
-    """保存cookies到本地"""
+    """保存cookies到本地
+    
+    Args:
+        cookies: 要保存的cookies字符串
+        expire_time: 可选的过期时间戳（毫秒），如果不提供则默认使用当前时间加上全局配置的过期时间
+    """
     try:
         f = File()
         if expire_time is None:
@@ -111,7 +114,11 @@ def save_cookies(cookies: str, expire_time: Optional[int] = None) -> bool:
 
 
 def save_user_info(user_info: dict) -> bool:
-    """保存用户信息到本地"""
+    """保存用户信息到本地
+    
+    Args:
+        user_info: 用户信息字典
+    """
     try:
         f = File()
         cache_info = {
@@ -126,7 +133,11 @@ def save_user_info(user_info: dict) -> bool:
 
 
 def save_books_info(books_info: List[dict]) -> bool:
-    """保存知识库信息到本地"""
+    """保存知识库信息到本地
+    
+    Args:
+        books_info: 知识库信息列表，每个元素是一个字典
+    """
     try:
         f = File()
         cache_info = {
@@ -141,16 +152,18 @@ def save_books_info(books_info: List[dict]) -> bool:
 
 
 def format_filename(filename: str) -> str:
-    """格式化文件名，移除非法字符"""
+    """格式化文件名，移除非法字符
+    
+    Args:
+        filename: 原始文件名字符串
+    """
     # 移除或替换Windows文件名中的非法字符
     illegal_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
     for char in illegal_chars:
         filename = filename.replace(char, '_')
 
-    # 移除前后空格和点
     filename = filename.strip(' .')
 
-    # 如果文件名为空，使用默认名称
     if not filename:
         filename = 'untitled'
 
@@ -158,7 +171,11 @@ def format_filename(filename: str) -> str:
 
 
 def ensure_dir_exists(dir_path: str) -> bool:
-    """确保目录存在"""
+    """确保目录存在
+    
+    Args:
+        dir_path: 目录路径
+    """
     try:
         f = File()
         if not f.exists(dir_path):
@@ -169,7 +186,12 @@ def ensure_dir_exists(dir_path: str) -> bool:
 
 
 def save_docs_cache(namespace: str, docs: List[dict]) -> bool:
-    """保存文章列表缓存到本地"""
+    """保存文章列表缓存到本地
+    
+    Args:
+        namespace: 知识库命名空间，用于生成缓存文件名
+        docs: 文章列表，每个元素是一个字典
+    """
     try:
         f = File()
         cache_info = {
@@ -192,7 +214,11 @@ def save_docs_cache(namespace: str, docs: List[dict]) -> bool:
 
 
 def get_docs_cache(namespace: str) -> Optional[List[dict]]:
-    """获取本地缓存的文章列表，如果已过期就返回None"""
+    """获取本地缓存的文章列表，如果已过期就返回None
+    
+    Args:
+        namespace: 知识库命名空间，用于生成缓存文件名
+    """
     try:
         f = File()
         cache_dir = os.path.join(GLOBAL_CONFIG.meta_dir, "Article_list_caching")

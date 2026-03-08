@@ -2,11 +2,8 @@ import os
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import requests
-
 from .log import Log
-
 
 class ThreadedImageDownloader:
     """多线程图片下载器"""
@@ -19,7 +16,16 @@ class ThreadedImageDownloader:
         self.lock = threading.Lock()
 
     def download_image(self, image_url, image_dir, image_name_mode, idx, suffix, image_file_prefix):
-        """下载单个图片"""
+        """下载单个图片
+        
+        Args:
+            image_url: 图片URL
+            image_dir: 图片存储目录
+            image_name_mode: 图片命名模式
+            idx: 图片索引
+            suffix: 图片后缀
+            image_file_prefix: 图片文件前缀
+        """
         try:
             r = requests.get(image_url, stream=True, timeout=30)
             image_name = image_url.split('/')[-1]
@@ -50,21 +56,29 @@ class ThreadedImageDownloader:
 
     def deal_yuque(self, origin_md_path, output_md_path, image_dir, image_url_prefix,
                    image_rename_mode, image_file_prefix, yuque_cdn_domain):
-        """处理单个Markdown文件，提取图片URL并下载"""
+        """处理单个Markdown文件，提取图片URL并下载
+        
+        Args:
+            origin_md_path: 原Markdown文件路径
+            output_md_path: 输出Markdown文件路径
+            image_dir: 图片存储目录
+            image_url_prefix: 图片URL前缀
+            image_rename_mode: 图片重命名模式
+            image_file_prefix: 图片文件前缀
+            yuque_cdn_domain: 语雀CDN域名
+        """
         output_content = []
         image_tasks = []
         idx = 0
 
-        # 第一遍：解析文件，收集图片URL
+        # 解析文件，收集图片URL
         with open(origin_md_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f.readlines():
                 line = re.sub(r'png#(.*)+', 'png)', line)
-                # 改进的正则表达式，能更好地匹配图片URL，包括带有HTML标签的情况
                 image_urls = re.findall(r'https?://[^\s<>"\)\]]+\.(?:png|jpeg|jpg)', line, re.IGNORECASE)
 
                 if image_urls:
-                    image_url = image_urls[0]  # 取第一个匹配的URL
-                    # 清理URL中可能的多余字符
+                    image_url = image_urls[0]
                     image_url = image_url.rstrip('.,;:!?')
                     if '.png' in image_url:
                         suffix = '.png'
@@ -123,7 +137,11 @@ class ThreadedImageDownloader:
         return self.total_count
 
     def mkdir(self, image_dir):
-        """创建目录"""
+        """创建目录
+        
+        Args:
+            image_dir: 目录路径
+        """
         image_dir = image_dir.strip().rstrip("\\")
         if os.path.exists(image_dir):
             Log.info(f'图片存储目录 {image_dir} 已存在')
@@ -141,9 +159,6 @@ class ThreadedImageDownloader:
             image_rename_mode: 图片重命名模式，默认为'asc'
             image_file_prefix: 图片文件前缀，默认为'image-'
             yuque_cdn_domain: 语雀CDN域名，默认为'cdn.nlark.com'
-        
-        Returns:
-            int: 下载的图片数量
         """
         if not md_file_path.endswith('.md'):
             Log.info(f'文件 {md_file_path} 不是Markdown文件，跳过处理')

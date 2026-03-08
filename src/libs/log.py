@@ -1,12 +1,11 @@
 from enum import Enum
-
 from colorama import Fore, Style, init
 
 # 初始化colorama
 init(autoreset=True)
 
-
 class Action(Enum):
+    """日志操作类型"""
     SUCCESS = "SUCCESS"
     INFO = "INFO"
     ERROR = "ERROR"
@@ -15,7 +14,12 @@ class Action(Enum):
 
 
 def dump_log(action: Action, message: str):
-    """输出日志信息"""
+    """输出日志信息
+    
+    Args:
+        action: 日志操作类型
+        message: 日志消息内容
+    """
     if action == Action.SUCCESS:
         print(f"{Fore.GREEN}{message}{Style.RESET_ALL}")
     elif action == Action.INFO:
@@ -32,7 +36,6 @@ class Log:
     """日志工具类"""
 
     NAME = "ytool->"
-    # 默认不启用调试模式
     _debug_mode = False
 
     @classmethod

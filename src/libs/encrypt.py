@@ -1,8 +1,6 @@
 import base64
-
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
-
 from .log import Log
 from .tools import gen_timestamp
 
@@ -77,7 +75,6 @@ def generate_rsa_keypair():
 
 
 if __name__ == "__main__":
-    # 模块测试功能（非CLI接口）
     test_password = "hello"
     encrypted = encrypt_password(test_password)
     Log.info(f"原始密码: {test_password}")

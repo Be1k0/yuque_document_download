@@ -1,18 +1,25 @@
 import os
 import re
-
 import requests
-
 from .log import Log
 
 # 默认配置，可以通过参数覆盖
 DEFAULT_YUQUE_CDN_DOMAIN = 'cdn.nlark.com'
 DEFAULT_IMAGE_FILE_PREFIX = 'image-'
 
-
 # 处理单个Markdown文件
 def deal_yuque(origin_md_path, output_md_path, image_dir, image_url_prefix, image_rename_mode,
                image_file_prefix=DEFAULT_IMAGE_FILE_PREFIX):
+    """处理单个Markdown文件，下载图片到本地并替换Markdown中的图片链接
+    
+    Args:
+        origin_md_path: 原始Markdown文件路径
+        output_md_path: 输出Markdown文件路径
+        image_dir: 图片存储目录
+        image_url_prefix: 文档图片前缀，默认为空
+        image_rename_mode: 图片重命名模式，默认为'asc'
+        image_file_prefix: 图片文件前缀，默认为'image-'
+    """
     output_content = []
     idx = 0
     with open(origin_md_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -46,6 +53,16 @@ def deal_yuque(origin_md_path, output_md_path, image_dir, image_url_prefix, imag
 
 # 下载图片
 def download_image(image_url, image_dir, image_name_mode, idx, suffix, image_file_prefix=DEFAULT_IMAGE_FILE_PREFIX):
+    """下载图片到本地
+    
+    Args:
+        image_url: 图片URL
+        image_dir: 图片存储目录
+        image_name_mode: 图片命名模式，'asc'表示按顺序命名，其他表示使用原始文件名
+        idx: 当前图片索引，用于命名
+        suffix: 图片文件后缀，如'.png'或'.jpeg'
+        image_file_prefix: 图片文件前缀，默认为'image-'
+    """
     r = requests.get(image_url, stream=True)
     image_name = image_url.split('/')[-1]
     if image_name_mode == 'asc':
@@ -57,6 +74,11 @@ def download_image(image_url, image_dir, image_name_mode, idx, suffix, image_fil
 
 # 创建目录
 def mkdir(image_dir):
+    """创建图片存储目录
+    
+    Args:
+        image_dir: 图片存储目录
+    """
     image_dir = image_dir.strip().rstrip("\\")
     if os.path.exists(image_dir):
         Log.info(f'图片存储目录 {image_dir} 已存在')
@@ -76,9 +98,6 @@ def process_single_file(md_file_path, image_url_prefix='', image_rename_mode='as
         image_rename_mode: 图片重命名模式，默认为'asc'
         image_file_prefix: 图片文件前缀，默认为'image-'
         yuque_cdn_domain: 语雀CDN域名，默认为'cdn.nlark.com'
-    
-    Returns:
-        int: 下载的图片数量
     """
     if not md_file_path.endswith('.md'):
         Log.info(f'文件 {md_file_path} 不是Markdown文件，跳过处理')

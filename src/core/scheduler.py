@@ -1,91 +1,31 @@
 import asyncio
 import os
-import sys
-from typing import Dict, Any, Optional
-
-from .yuque import YuqueApi
-from ..libs import inquiry
-from ..libs.constants import (
-    GLOBAL_CONFIG, MutualAnswer, YuqueAccount
-)
+from typing import Dict, Any
+from .yuque import default_client, YuqueClient
+from ..libs.constants import GLOBAL_CONFIG, MutualAnswer
 from ..libs.file import File
 from ..libs.log import Log
 from ..libs.tools import (
-    get_local_cookies, get_cache_books_info, 
-    format_filename, ensure_dir_exists
+    get_cache_books_info, format_filename, ensure_dir_exists
 )
-
+from ..libs.error_handler import ErrorHandler
 
 class Scheduler:
-    """调度器类"""
+    """下载调度器类
+    
+    提供下载任务调度功能，管理下载流程和并发控制
+    """
+    
+    def __init__(self, client: YuqueClient = None):
+        self.client = client or default_client
+        self.concurrency = 5
 
-    @staticmethod
-    async def start() -> None:
-        """知识库启动程序"""
-        try:
-            cookies = get_local_cookies()
-
-            # 没有cookie缓存，进入登录环节
-            if not cookies:
-                await Scheduler._start_program(None)
-            else:
-                # 有cookie，不走登录
-                books_info = get_cache_books_info()
-
-                if books_info:
-                    await Scheduler._handle_inquiry()
-                else:
-                    books_result = await YuqueApi.get_user_bookstacks()
-                    if books_result:
-                        Log.success("获取知识库成功")
-                        await Scheduler._handle_inquiry()
-                    else:
-                        Log.error("获取知识库失败")
-                        sys.exit(1)
-
-        except Exception as e:
-            Log.error(f"程序启动失败: {str(e)}")
-            sys.exit(1)
-
-    @staticmethod
-    async def _start_program(account: Optional[YuqueAccount]) -> None:
-        """所有环节进入问询程序"""
-        if account is None:
-            account = inquiry.ask_user_account()
-
-        try:
-            login_result = await YuqueApi.login(account.username, account.password)
-            if login_result:
-                Log.success("登录成功!")
-                books_result = await YuqueApi.get_user_bookstacks()
-                if books_result:
-                    Log.success("获取知识库成功")
-                    await Scheduler._handle_inquiry()
-                else:
-                    Log.error("获取知识库失败")
-                    sys.exit(1)
-            else:
-                Log.error("登录失败，请检查用户名和密码")
-                sys.exit(1)
-
-        except Exception as e:
-            Log.error(f"登录过程失败: {str(e)}")
-            sys.exit(1)
-
-    @staticmethod
-    async def _handle_inquiry() -> None:
-        """处理用户询问"""
-        try:
-            answer = inquiry.ask_user_toc_options()
-            await Scheduler._start_download_task(answer)
-
-        except Exception as e:
-            Log.error(f"处理用户询问失败: {str(e)}")
-            sys.exit(1)
-
-    @staticmethod
-    async def _start_download_task(answer: MutualAnswer) -> None:
-        """开始下载任务"""
+    async def start_download_task(self, answer: MutualAnswer) -> None:
+        """开始下载任务
+        
+        Args:
+            answer: 包含下载选项和回调的 MutualAnswer 对象
+        """
         try:
             books_info = get_cache_books_info()
             if not books_info:
@@ -104,245 +44,230 @@ class Scheduler:
 
             Log.info(f"开始下载 {len(selected_books)} 个知识库")
 
-            # 确保输出目录存在 - 直接使用全局配置的输出目录
+            # 确保输出目录存在
             output_dir = GLOBAL_CONFIG.target_output_dir
-
             ensure_dir_exists(output_dir)
 
-            # 下载每个知识库
+            # 下载每个知识库 (知识库之间串行，文档并行)
             for book in selected_books:
-                await Scheduler._download_book(book, output_dir, answer)
+                await self._download_book(book, output_dir, answer)
 
             Log.success("所有知识库下载完成！")
 
         except Exception as e:
             Log.error(f"下载任务失败: {str(e)}")
+            if type(e).__name__ == "CookiesExpiredError":
+                raise
 
-    @staticmethod
-    async def _download_book(book: Any, output_dir: str, answer: MutualAnswer) -> None:
-        """下载单个知识库"""
-        try:
-            Log.info(f"开始下载知识库: {book.name}")
+    @ErrorHandler.async_error_handler("下载知识库", reraise=False)
+    async def _download_book(self, book: Any, output_dir: str, answer: MutualAnswer) -> None:
+        """下载单个知识库
+        
+        Args:
+            book: 知识库对象
+            output_dir: 输出目录路径
+            answer: 包含下载选项和回调的 MutualAnswer 对象
+        """
+        Log.info(f"开始下载知识库: {book.name}")
 
-            # 创建知识库目录
-            book_dir = os.path.join(output_dir, format_filename(book.name))
-            ensure_dir_exists(book_dir)
+        # 创建知识库目录
+        book_dir = os.path.join(output_dir, format_filename(book.name))
+        ensure_dir_exists(book_dir)
 
-            namespace = ""
+        namespace = ""
 
-            if hasattr(book, 'namespace') and book.namespace:
-                namespace = book.namespace
-            # 如果没有namespace，就从其他字段构建
-            elif hasattr(book, 'user_login') and hasattr(book, 'slug'):
-                namespace = f"{book.user_login}/{book.slug}"
+        # 获取知识库的命名空间
+        if hasattr(book, 'namespace') and book.namespace:
+            namespace = book.namespace
+        elif hasattr(book, 'user_login') and hasattr(book, 'slug'):
+            namespace = f"{book.user_login}/{book.slug}"
+        
+        # 兼容旧版本数据结构
+        if not namespace and hasattr(book, 'user') and hasattr(book, 'slug'):
+            if isinstance(book.user, dict) and 'login' in book.user:
+                namespace = f"{book.user['login']}/{book.slug}"
 
-            # 如果还是没有namespace，尝试从user字段获取
-            if not namespace and hasattr(book, 'user') and hasattr(book, 'slug'):
-                if isinstance(book.user, dict) and 'login' in book.user:
-                    namespace = f"{book.user['login']}/{book.slug}"
+        if not namespace:
+            Log.error(f"知识库 {book.name} 缺少必要的命名空间信息")
+            return
 
-            if not namespace:
-                Log.error(f"知识库 {book.name} 缺少必要的命名空间信息")
+        Log.info(f"知识库命名空间: {namespace}")
+
+        # 获取知识库的文档列表
+        docs = await self.client.get_book_docs(namespace)
+        if not docs:
+            Log.warn(f"知识库 {book.name} 没有文档")
+            return
+
+        Log.info(f"知识库 {book.name} 共有 {len(docs)} 个文档")
+
+        # 构建层级映射表
+        level_map = {}
+        for doc in docs:
+            uuid = doc.get('uuid', '')
+            if uuid:
+                level_map[uuid] = {
+                    'title': doc.get('title', ''),
+                    'level': doc.get('level', 0),
+                    'type': doc.get('type', 'DOC'),
+                    'parent_uuid': doc.get('parent_uuid', '')
+                }
+
+        # 筛选文档
+        filtered_docs = docs
+        if answer.selected_docs and book.name in answer.selected_docs:
+            selected_ids = answer.selected_docs[book.name]
+            filtered_docs = [doc for doc in docs if doc.get('id', '') in selected_ids]
+            Log.info(f"下载范围: 选择的 {len(filtered_docs)} 篇特定文档")
+        else:
+            Log.info("下载范围: 所有文档")
+
+        # 并发下载
+        semaphore = asyncio.Semaphore(self.concurrency)
+        
+        async def semaphore_download(idx, doc):
+            async with semaphore:
+                await self._process_doc_download(idx, len(filtered_docs), doc, namespace, book_dir, answer, level_map)
+
+        tasks = [semaphore_download(i, doc) for i, doc in enumerate(filtered_docs, 1)]
+        
+        # 使用 gather 并发执行
+        await asyncio.gather(*tasks)
+
+        Log.success(f"知识库 {book.name} 下载完成")
+
+    @ErrorHandler.async_error_handler("处理文档下载", reraise=False)
+    async def _process_doc_download(self, index, total, doc, namespace, book_dir, answer, level_map):
+        """处理单个文档下载逻辑
+        
+        Args:
+            index: 文档在列表中的索引
+            total: 总文档数
+            doc: 文档对象
+            namespace: 知识库命名空间
+            book_dir: 知识库输出目录
+            answer: 包含下载选项和回调的 MutualAnswer 对象
+            level_map: 层级映射表
+        """
+        doc_title = doc.get('title', 'Untitled')
+        doc_slug = doc.get('slug', '')
+        doc_url = doc.get('url', '')
+
+        # 检查文档标识符
+        if not doc_slug and not doc_url:
+            Log.info(f"跳过无标识符条目: {doc_title}")
+            return
+
+        doc_type = doc.get('type', '')
+        if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
+            Log.info(f"跳过非文档条目: {doc_title}")
+            return
+
+        # 构建路径
+        target_dir = book_dir
+        parent_uuid = doc.get('parent_uuid', '')
+        if parent_uuid and parent_uuid in level_map:
+            path_parts = self._build_doc_path(parent_uuid, level_map)
+            if path_parts:
+                target_dir = os.path.join(book_dir, *path_parts)
+
+        filename = format_filename(doc_title) + '.md'
+        file_path = os.path.join(target_dir, filename)
+
+        # 跳过逻辑
+        if answer.skip:
+            if os.path.exists(file_path):
+                answer.skipped_count.increment()
+                Log.info(f"跳过已存在: {filename}")
                 return
+            
+            folder_name = os.path.splitext(filename)[0]
+            subdir_file_path = os.path.join(target_dir, folder_name, filename)
+            if os.path.exists(subdir_file_path):
+                    answer.skipped_count.increment()
+                    Log.info(f"跳过已存在(子目录): {folder_name}/{filename}")
+                    return
 
-            Log.info(f"知识库命名空间: {namespace}")
+        if answer.progress_callback:
+            answer.progress_callback(f"正在下载 ({index}/{total}): {doc_title}")
 
-            # 获取知识库的文档列表
-            docs = await YuqueApi.get_book_docs(namespace)
-            if not docs:
-                Log.warn(f"知识库 {book.name} 没有文档")
-                return
+        Log.info(f"下载文档 ({index}/{total}): {doc_title}")
 
-            Log.info(f"知识库 {book.name} 共有 {len(docs)} 个文档")
-            Log.info(answer.download_range)
+        await self._download_doc(namespace, doc, book_dir, answer, level_map)
+        
+        answer.downloaded_count.increment()
+        
 
-            # 构建层级映射表：uuid -> (title, level, type, parent_uuid)
-            level_map = {}
-            for doc in docs:
-                uuid = doc.get('uuid', '')
-                if uuid:
-                    level_map[uuid] = {
-                        'title': doc.get('title', ''),
-                        'level': doc.get('level', 0),
-                        'type': doc.get('type', 'DOC'),
-                        'parent_uuid': doc.get('parent_uuid', '')
-                    }
+    @ErrorHandler.async_error_handler("下载文档IO", reraise=True)
+    async def _download_doc(self, namespace: str, doc: Dict[str, Any], book_dir: str, answer: MutualAnswer, level_map: Dict[str, Dict]) -> None:
+        """下载单个文档的具体实现
+        
+        Args:
+            namespace: 知识库命名空间
+            doc: 文档对象
+            book_dir: 知识库输出目录
+            answer: 包含下载选项和回调的 MutualAnswer 对象
+            level_map: 层级映射表
+        """
+        doc_title = doc.get('title', 'Untitled')
+        doc_slug = doc.get('slug', '')
+        doc_url = doc.get('url', '')
+        parent_uuid = doc.get('parent_uuid', '')
 
-            # 根据下载范围处理文档列表
-            filtered_docs = docs
-            if answer.download_range == "recent" and GLOBAL_CONFIG.article_limit > 0:
-                # 按更新时间排序文档（如果有更新时间字段）
-                if all('updated_at' in doc for doc in docs):
-                    sorted_docs = sorted(docs, key=lambda x: x.get('updated_at', ''), reverse=True)
-                    filtered_docs = sorted_docs[:GLOBAL_CONFIG.article_limit]
-                    Log.info(f"下载范围: 最近更新的 {len(filtered_docs)} 篇文档")
-                else:
-                    filtered_docs = docs[:GLOBAL_CONFIG.article_limit]
-                    Log.info(f"下载范围: 前 {len(filtered_docs)} 篇文档（无法按更新时间排序）")
-            elif answer.download_range == "custom" and GLOBAL_CONFIG.article_limit > 0:
-                # 自定义范围: 直接取前N篇文档
-                filtered_docs = docs[:GLOBAL_CONFIG.article_limit]
-                Log.info(f"下载范围: 自定义范围，前 {len(filtered_docs)} 篇文档")
-            elif answer.download_range == "selected" and hasattr(answer,
-                                                                 'selected_docs') and book.name in answer.selected_docs:
-                # 选择特定文章: 根据ID过滤文档
-                selected_ids = answer.selected_docs[book.name]
-                filtered_docs = [doc for doc in docs if doc.get('id', '') in selected_ids]
-                Log.info(f"下载范围: 选择的 {len(filtered_docs)} 篇特定文档")
-            else:
-                Log.info("下载范围: 所有文档")
+        # 提取slug
+        if not doc_url:
+            doc_url = doc_slug
 
-            # 下载每个文档
-            for i, doc in enumerate(filtered_docs, 1):
-                try:
-                    doc_title = doc.get('title', 'Untitled')
-                    doc_slug = doc.get('slug', '')
-                    doc_url = doc.get('url', '')
+        target_dir = book_dir
+        if parent_uuid and parent_uuid in level_map:
+            path_parts = self._build_doc_path(parent_uuid, level_map)
+            if path_parts:
+                target_dir = os.path.join(book_dir, *path_parts)
+                ensure_dir_exists(target_dir)
 
-                    # 调试：记录URL和slug信息
-                    Log.debug(f"文档: {doc_title}, URL: {doc_url}, Slug: {doc_slug}")
+        filename = format_filename(doc_title) + '.md'
+        file_path = os.path.join(target_dir, filename)
 
-                    # 检查是否有有效的标识符 (url或slug)
-                    if not doc_slug and not doc_url:
-                        Log.info(f"跳过没有有效标识符的条目: {doc_title}")
-                        continue
+        # 下载文档
+        markdown_content = await self.client.export_markdown(namespace, doc_url, answer.line_break)
+        if not markdown_content:
+            Log.warn(f"无法获取内容: {doc_title}")
+            return
 
-                    # 只跳过明确标记为非文档的条目
-                    doc_type = doc.get('type', '')
-                    if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
-                        Log.info(f"跳过非文档条目: {doc_title} (类型: {doc_type})")
-                        continue
+        if not answer.line_break:
+            markdown_content = markdown_content.replace('</br>', '').replace('<br>', '').replace('<br/>', '')
 
-                    # 根据层级结构构建目录路径
-                    target_dir = book_dir
-                    parent_uuid = doc.get('parent_uuid', '')
-                    if parent_uuid and parent_uuid in level_map:
-                        path_parts = Scheduler._build_doc_path(parent_uuid, level_map)
-                        if path_parts:
-                            target_dir = os.path.join(book_dir, *path_parts)
+        f = File()
+        f.write(file_path, markdown_content)
 
-                    # 生成文件名
-                    filename = format_filename(doc_title) + '.md'
-                    file_path = os.path.join(target_dir, filename)
+        # 记录已下载或更新的文件，给后续图片下载定界使用
+        answer.downloaded_files.append(file_path)
 
-                    # 智能跳过已存在的文件
-                    if answer.skip:
-                        # 检查原始文件路径
-                        if os.path.exists(file_path):
-                            answer.skipped_count += 1
-                            Log.info(f"跳过已存在的文件: {filename}")
-                            continue
+        rel_path = os.path.relpath(file_path, book_dir)
+        Log.success(f"保存成功: {rel_path}")
 
-                        # 检查图片下载后可能移动到的子目录中的文件
-                        folder_name = os.path.splitext(filename)[0]
-                        subdir_file_path = os.path.join(target_dir, folder_name, filename)
-                        if os.path.exists(subdir_file_path):
-                            answer.skipped_count += 1
-                            Log.info(f"跳过已存在的文件（在子目录中）: {folder_name}/{filename}")
-                            continue
-
-                    # 调用进度回调，显示正在下载的文章
-                    if answer.progress_callback:
-                        answer.progress_callback(f"正在下载文章 ({i}/{len(filtered_docs)}): {doc_title}")
-
-                    Log.info(f"下载文档 ({i}/{len(filtered_docs)}): {doc_title}")
-
-                    # 直接传递完整的doc对象
-                    await Scheduler._download_doc(namespace, doc, book_dir, answer, level_map)
-                    
-                    # 记录下载成功
-                    answer.downloaded_count += 1
-
-                    # 添加延迟避免请求过快
-                    await asyncio.sleep(GLOBAL_CONFIG.duration / 1000)
-
-                except Exception as e:
-                    Log.error(f"下载文档失败: {str(e)}")
-                    continue
-
-            Log.success(f"知识库 {book.name} 下载完成")
-
-        except Exception as e:
-            Log.error(f"下载知识库失败: {str(e)}")
-            sys.exit(1)
-
-    @staticmethod
-    async def _download_doc(namespace: str, doc: Dict[str, Any], book_dir: str, answer: MutualAnswer, level_map: Dict[str, Dict]) -> None:
-        """下载单个文档"""
-        try:
-            doc_title = doc.get('title', 'Untitled')
-            doc_slug = doc.get('slug', '')
-            doc_url = doc.get('url', '')
-            doc_uuid = doc.get('uuid', '')
-            parent_uuid = doc.get('parent_uuid', '')
-
-            # 如果URL为空，尝试使用slug作为备选
-            if not doc_url:
-                doc_url = doc_slug
-                Log.info(f"文档没有URL，使用slug作为URL: {doc_slug}")
-
-            # 根据层级结构构建目录路径
-            target_dir = book_dir
-            if parent_uuid and parent_uuid in level_map:
-                path_parts = Scheduler._build_doc_path(parent_uuid, level_map)
-                if path_parts:
-                    target_dir = os.path.join(book_dir, *path_parts)
-                    ensure_dir_exists(target_dir)
-                    Log.debug(f"文档层级路径: {path_parts}")
-
-            # 生成文件名
-            filename = format_filename(doc_title) + '.md'
-            file_path = os.path.join(target_dir, filename)
-
-            # 获取文档内容
-            markdown_content = await YuqueApi.export_markdown(namespace, doc_url, answer.line_break)
-            if not markdown_content:
-                Log.warn(f"无法获取文档内容: {doc_title}")
-                return
-
-            # 处理换行标识
-            if not answer.line_break:
-                markdown_content = markdown_content.replace('</br>', '')
-                markdown_content = markdown_content.replace('<br>', '')
-                markdown_content = markdown_content.replace('<br/>', '')
-
-            # 保存文档
-            f = File()
-            f.write(file_path, markdown_content)
-
-            # 计算相对路径用于日志显示
-            rel_path = os.path.relpath(file_path, book_dir)
-            Log.success(f"文档保存成功: {rel_path}")
-
-        except Exception as e:
-            Log.error(f"下载文档失败: {str(e)}")
-
-    @staticmethod
-    def _build_doc_path(uuid: str, level_map: Dict[str, Dict]) -> list:
-        """递归构建文档的层级路径"""
+    def _build_doc_path(self, uuid: str, level_map: Dict[str, Dict]) -> list:
+        """构建文档路径
+        
+        Args:
+            uuid: 文档UUID
+            level_map: 层级映射表
+        """
         if uuid not in level_map:
             return []
-
         doc_info = level_map[uuid]
         doc_type = doc_info.get('type', 'DOC')
-
-        # 处理TITLE和DOC类型的父级
-        # DOC类型的文档也可以作为父级（比如"动态场景生成"有子文档"开发文档"）
         if doc_type.upper() not in ['TITLE', 'DOC']:
             return []
-
+        
         title = format_filename(doc_info['title'])
         parent_uuid = level_map.get(uuid, {}).get('parent_uuid', '')
-
-        # 递归获取父级路径
-        parent_path = Scheduler._build_doc_path(parent_uuid, level_map)
-
-        # 将当前文档添加到路径末尾
+        parent_path = self._build_doc_path(parent_uuid, level_map)
         return parent_path + [title]
 
     @staticmethod
     def clean_cache() -> bool:
-        """清理缓存"""
+        """清理缓存数据"""
         try:
             from ..libs.tools import clean_cache
             return clean_cache()

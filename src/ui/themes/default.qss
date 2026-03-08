@@ -1,0 +1,356 @@
+/* 全局样式 */
+QMainWindow, QWidget#CentralWidget {
+    background-color: @background_color;
+}
+
+QWidget {
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 14px;
+    color: @text_color;
+}
+
+/* 主窗口侧边栏 */
+QListWidget#Sidebar {
+    background-color: @panel_background;
+    border: none;
+    outline: none;
+    min-width: 200px;
+    padding: 10px 0;
+}
+
+QListWidget#Sidebar::item {
+    height: 50px;
+    padding-left: 15px;
+    border: none;
+    color: @text_color;
+    border-left: 4px solid transparent;
+}
+
+QListWidget#Sidebar::item:hover {
+    background-color: @list_hover;
+}
+
+QListWidget#Sidebar::item:selected {
+    background-color: @list_selected;
+    color: @primary_color;
+    border-left: 4px solid @primary_color;
+    font-weight: bold;
+}
+
+/* 内容区域面板 */
+QGroupBox {
+    background-color: @panel_background;
+    border: 1px solid @border_color;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-weight: bold;
+    padding: 15px;
+}
+
+QSplitter::handle {
+    background-color: @border_color;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 10px;
+    color: @primary_color;
+    background-color: @panel_background;
+}
+
+/* 按钮样式 */
+QPushButton, QPushButton#PrimaryButton {
+    background-color: @primary_color;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: bold;
+    min-height: 20px;
+}
+
+QPushButton:hover {
+    background-color: @primary_hover;
+}
+
+QPushButton:pressed {
+    background-color: @primary_pressed;
+}
+
+QPushButton:disabled {
+    background-color: @secondary_color;
+    opacity: 0.6;
+}
+
+QPushButton#SecondaryButton {
+    background-color: @secondary_btn;
+    color: @secondary_btn_text;
+}
+
+QPushButton#SecondaryButton:hover {
+    background-color: @secondary_btn_hover;
+}
+
+QPushButton#SecondaryButton:pressed {
+    background-color: @secondary_btn_pressed;
+}
+
+QPushButton#DangerButton {
+    background-color: @danger_color;
+}
+
+/* 输入框样式 */
+QLineEdit {
+    background-color: @input_background;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: @text_color;
+    selection-background-color: @primary_color;
+    selection-color: white;
+}
+
+QTextEdit, QPlainTextEdit {
+    background-color: @input_background;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    padding: 8px;
+    color: @text_color;
+    selection-background-color: @primary_color;
+    selection-color: white;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border: 2px solid @primary_color;
+}
+
+/* 下拉框样式 - 修复PyQt6不可见问题 */
+QComboBox {
+    background-color: @input_background;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: @text_color;
+    min-height: 25px;
+}
+
+QComboBox:on { /* shift the text when the popup opens */
+    /* padding removed to prevent text displacement */
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 25px;
+    border-left-width: 1px;
+    border-left-color: @border_color;
+    border-left-style: solid;
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+}
+
+QComboBox::down-arrow {
+    image: url(@icon_chevron);
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: @input_background;
+    color: @text_color;
+    selection-background-color: @primary_color;
+    selection-color: white;
+    border: 1px solid @border_color;
+    outline: none;
+}
+
+/* 复选框样式 - 修复PyQt6不可见问题 */
+QCheckBox {
+    spacing: 8px;
+    color: @text_color;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid @border_color;
+    border-radius: 4px;
+    background-color: @input_background;
+}
+
+QCheckBox::indicator:unchecked:hover {
+    border-color: @primary_color;
+}
+
+QCheckBox::indicator:checked {
+    background-color: @primary_color;
+    border-color: @primary_color;
+    background-color: @primary_color;
+    border-color: @primary_color;
+    image: url(@icon_check);
+}
+
+/* 列表和表格共通设定 */
+QListWidget, QTableWidget, QTreeWidget {
+    background-color: @input_background;
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    outline: none;
+    color: @text_color;
+}
+
+QListWidget::item, QTableWidget::item {
+    padding: 8px 8px;
+    border-radius: 4px;
+    color: @text_color;
+    border-bottom: transparent;
+    border-left: transparent;
+}
+
+QTreeWidget::item {
+    padding: 8px 8px;
+    border-radius: 0px;
+    color: @text_color;
+    border: none;
+}
+
+/* 此时由于我们用的 drawRow，所以关闭 show-decoration-selected 防止冲突重叠绘制 */
+QTreeWidget {
+    show-decoration-selected: 0;
+}
+
+QListWidget::item:selected, QTableWidget::item:selected {
+    background-color: @list_selected_bg;
+    color: @text_color;
+    font-weight: bold;
+    border: 1px solid @list_selected_border;
+    border-radius: 6px;
+}
+
+QTreeWidget::item:selected {
+    background-color: transparent;
+    color: @text_color;
+    font-weight: bold;
+    border: none;
+    border-radius: 0px;
+}
+
+QListWidget::item:hover, QTableWidget::item:hover {
+    background-color: @list_hover;
+    border-radius: 4px;
+}
+
+QTreeWidget::item:hover {
+    background-color: transparent;
+    border-radius: 0px;
+}
+/* 滚动条 */
+QScrollBar:vertical {
+    border: none;
+    background: @background_color;
+    width: 8px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: @secondary_color;
+    min-height: 20px;
+    border-radius: 4px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: @background_color;
+    height: 8px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: @secondary_color;
+    min-width: 20px;
+    border-radius: 4px;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* 特殊控件 */
+QProgressBar {
+    border: 1px solid @border_color;
+    border-radius: 6px;
+    text-align: center;
+    background-color: @input_background;
+    color: @text_color;
+}
+
+QProgressBar::chunk {
+    background-color: @success_color;
+    border-radius: 5px;
+}
+
+QStatusBar {
+    background-color: @panel_background;
+    color: @text_secondary;
+    border-top: 1px solid @border_color;
+}
+
+/* 标签页样式 */
+QTabWidget::pane {
+    border: 1px solid @border_color;
+    background-color: @panel_background;
+    border-radius: 4px;
+}
+
+QTabWidget::tab-bar {
+    left: 5px;
+}
+
+QTabBar::tab {
+    background-color: @input_background;
+    color: @text_secondary;
+    border: 1px solid @border_color;
+    border-bottom-color: @border_color;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    min-width: 80px;
+    padding: 8px 12px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected, QTabBar::tab:hover {
+    background-color: @panel_background;
+    color: @primary_color;
+    border-color: @border_color;
+    border-bottom-color: @panel_background; /* Blend with pane */
+    font-weight: bold;
+}
+
+QTabBar::tab:selected {
+    border-top: 2px solid @primary_color;
+}
+
+/* 特定按钮样式增强 */
+QPushButton#ExportButton {
+    font-size: 14px;
+    padding: 8px 20px;
+}
+
+/* 消息提示框样式 */
+QMessageBox {
+    background-color: @panel_background;
+}
+
+QMessageBox QLabel {
+    color: @text_color;
+}
+
+QMessageBox QPushButton {
+    min-width: 60px;
+}
+
