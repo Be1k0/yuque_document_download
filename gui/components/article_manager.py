@@ -4,8 +4,9 @@ from PyQt6.QtWidgets import (
     QMessageBox, QAbstractItemView, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator
 )
 from PyQt6.QtCore import Qt, QRect
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QCursor
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QCursor, QIcon
 from PyQt6.QtWidgets import QStyleOptionViewItem
+from src.libs.path_utils import get_resource_path
 from src.libs.constants import MutualAnswer
 from src.libs.debug_logger import DebugLogger
 from qasync import asyncSlot
@@ -93,6 +94,25 @@ class ArticleTreeWidget(QTreeWidget):
                 update_children_selection(child, selected)
                 
         update_children_selection(item, is_selected)
+
+
+def get_article_icon(item_type: str, item=None):
+    doc_type = ''
+    if item and isinstance(item, dict):
+        doc_type = item.get('type', '').upper()
+    elif hasattr(item, 'type'):
+        doc_type = getattr(item, 'type', '').upper()
+    
+    if item_type == 'TITLE':
+        return QIcon(get_resource_path("src/ui/themes/resources/icons/folder.svg"))
+    elif doc_type == 'SHEET':
+        return QIcon(get_resource_path("src/ui/themes/resources/icons/yuque-sheet.svg"))
+    elif doc_type == 'TABLE' or doc_type == 'LAKETABLE':
+        return QIcon(get_resource_path("src/ui/themes/resources/icons/yuque-table.svg"))
+    elif doc_type == 'BOARD':
+        return QIcon(get_resource_path("src/ui/themes/resources/icons/yuque-board.svg"))
+    else:
+        return QIcon(get_resource_path("src/ui/themes/resources/icons/yuque-doc.svg"))
 
 class ArticleSelectionDialog(QDialog):
     """文章选择对话框
@@ -239,9 +259,10 @@ class ArticleSelectionDialog(QDialog):
         owner_books.sort(key=lambda x: x.name)
         other_books.sort(key=lambda x: x.name)
 
+        book_icon = QIcon(get_resource_path("src/ui/themes/resources/icons/yuque-book.svg"))
         # 先添加个人知识库
         for item in owner_books:
-            display_name = f"👤 {item.name}"
+            display_name = item.name
             # 存储namespace信息
             namespace = ""
             if hasattr(item, 'namespace') and item.namespace:
@@ -252,7 +273,7 @@ class ArticleSelectionDialog(QDialog):
                 if isinstance(item.user, dict) and 'login' in item.user:
                     namespace = f"{item.user['login']}/{item.slug}"
 
-            self.book_dropdown.addItem(display_name)
+            self.book_dropdown.addItem(book_icon, display_name)
 
             # 存储namespace和原始名称到下拉框项的数据中
             index = self.book_dropdown.count() - 1
@@ -261,7 +282,7 @@ class ArticleSelectionDialog(QDialog):
 
         # 再添加团队知识库
         for item in other_books:
-            display_name = f"👥 {item.name}"
+            display_name = item.name
             # 存储namespace信息
             namespace = ""
             if hasattr(item, 'namespace') and item.namespace:
@@ -395,15 +416,14 @@ class ArticleSelectionDialog(QDialog):
                         title = item.get('title', 'Untitled')
                         item_type = item.get('type', 'DOC').upper()
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}" 
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         if parent_item == self.article_list:
                             tree_item = QTreeWidgetItem(self.article_list, [display_title])
                         else:
                             tree_item = QTreeWidgetItem(parent_item, [display_title])
+                        
+                        tree_item.setIcon(0, get_article_icon(item_type, item))
                         
                         # 设置样式
                         font = QFont()
@@ -442,12 +462,10 @@ class ArticleSelectionDialog(QDialog):
                             item_type = getattr(article, 'type', 'DOC').upper()
                             article_id = getattr(article, 'id', '')
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}"
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         tree_item = QTreeWidgetItem(self.article_list, [display_title])
+                        tree_item.setIcon(0, get_article_icon(item_type, article))
                         
                         font = QFont()
                         if item_type == 'TITLE':
@@ -661,7 +679,8 @@ class ArticleManagerMixin:
                 # 选择包含所选文章的知识库
                 for i in range(self.book_list.count()):
                     item = self.book_list.item(i)
-                    book_name = item.text()[2:].strip()
+                    name_data = item.data(Qt.ItemDataRole.UserRole + 1)
+                    book_name = name_data if name_data else item.text().strip()
                     if book_name in selected_book_names:
                         item.setSelected(True)
 
@@ -697,7 +716,8 @@ class ArticleManagerMixin:
         # 如果只选中一个知识库，加载其文章列表
         if len(selected_items) == 1:
             item = selected_items[0]
-            book_name = item.text()[2:].strip()
+            name_data = item.data(Qt.ItemDataRole.UserRole + 1)
+            book_name = name_data if name_data else item.text().strip()
             namespace = item.data(Qt.ItemDataRole.UserRole)
             if not namespace:
                 self.article_list.clear()
@@ -827,15 +847,14 @@ class ArticleManagerMixin:
                         item_type = item.get('type', 'DOC').upper()
                         updated_at = item.get('updated_at', '')
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}"
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         if parent_item == self.article_list:
                             tree_item = QTreeWidgetItem(self.article_list, [display_title])
                         else:
                             tree_item = QTreeWidgetItem(parent_item, [display_title])
+                        
+                        tree_item.setIcon(0, get_article_icon(item_type, item))
                         
                         font = QFont()
                         if item_type == 'TITLE':
@@ -880,12 +899,10 @@ class ArticleManagerMixin:
                             title = getattr(article, 'title', 'Untitled')
                             item_type = getattr(article, 'type', 'DOC').upper()
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}"
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         tree_item = QTreeWidgetItem(self.article_list, [display_title])
+                        tree_item.setIcon(0, get_article_icon(item_type, article))
                         
                         font = QFont()
                         if item_type == 'TITLE':
@@ -1059,9 +1076,12 @@ class ArticleManagerMixin:
         info_item.setFont(0, QFont("Arial", 10, QFont.Weight.Bold))
 
         # 显示选中的知识库
+        book_icon = QIcon(get_resource_path("src/ui/themes/resources/icons/yuque-book.svg"))
         for item in selected_items:
-            book_name = item.text()[2:].strip()
-            book_item = QTreeWidgetItem(self.article_list, [f"📚 {book_name}"])
+            name_data = item.data(Qt.ItemDataRole.UserRole + 1)
+            book_name = name_data if name_data else item.text().strip()
+            book_item = QTreeWidgetItem(self.article_list, [book_name])
+            book_item.setIcon(0, book_icon)
             book_item.setFlags(Qt.ItemFlag.NoItemFlags)
 
         # 添加提示信息

@@ -356,6 +356,41 @@ class CustomUrlController(BaseController):
                     }
                     doc_list.append(doc)
                 
+                # 获取文档真实类型
+                book_id = book_data["book"].get("id")
+                if book_id:
+                    try:
+                        import json
+                        cookies_str = "; ".join([f"{k}={v}" for k, v in cookies.items()]) if cookies else ""
+                        api_url = f"/api/docs?book_id={book_id}"
+                        docs_resp_text = await Request.get_text_with_cookies(api_url, cookies_str, is_html=False)
+                        docs_resp = json.loads(docs_resp_text)
+                        
+                        if docs_resp and "data" in docs_resp and isinstance(docs_resp["data"], list):
+                            type_map = {}
+                            for d in docs_resp["data"]:
+                                t = d.get("type")
+                                if t:
+                                    if d.get("slug"):
+                                        type_map[str(d["slug"])] = t
+                                    if d.get("id"):
+                                        type_map[str(d["id"])] = t
+                            
+                            for doc in doc_list:
+                                t = None
+                                doc_id = doc.get("id")
+                                doc_url = doc.get("url")
+                                doc_slug = doc.get("slug")
+                                
+                                if doc_id: t = t or type_map.get(str(doc_id))
+                                if doc_url: t = t or type_map.get(str(doc_url).strip('/'))
+                                if doc_slug: t = t or type_map.get(str(doc_slug))
+                                
+                                if t:
+                                    doc["type"] = t
+                    except Exception as e:
+                        self.log_error(f"获取知识库文档真实类型失败: {e}")
+                
                 self.log_success(f"成功解析 {len(doc_list)} 篇文档")
                 self.parse_finished.emit(doc_list)
             else:

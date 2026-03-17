@@ -367,15 +367,15 @@ class CustomUrlManagerMixin:
                     title = item.get('title', '无标题')
                     item_type = item.get('type', 'doc').upper()
                     
-                    if item_type == 'TITLE':
-                        display_title = f"📁 {title}"
-                    else:
-                        display_title = f"📄 {title}"
+                    display_title = title
                     
                     if parent_item == self.custom_article_list:
                         tree_item = QTreeWidgetItem(self.custom_article_list, [display_title])
                     else:
                         tree_item = QTreeWidgetItem(parent_item, [display_title])
+                    
+                    from gui.components.article_manager import get_article_icon
+                    tree_item.setIcon(0, get_article_icon(item_type, item))
                     
                     # 设置样式
                     font = QFont()
@@ -401,13 +401,12 @@ class CustomUrlManagerMixin:
             for doc in docs:
                 title = doc.get('title', '无标题')
                 item_type = doc.get('type', 'doc').upper()
-                if item_type == 'TITLE':
-                    display_title = f"📁 {title}"
-                else:
-                    display_title = f"📄 {title}"
+                display_title = title
                 
-                item = QTreeWidgetItem(self.custom_article_list, [display_title])
-                item.setData(0, Qt.ItemDataRole.UserRole, doc)
+                tree_item = QTreeWidgetItem(self.custom_article_list, [display_title])
+                from gui.components.article_manager import get_article_icon
+                tree_item.setIcon(0, get_article_icon(item_type, doc))
+                tree_item.setData(0, Qt.ItemDataRole.UserRole, doc)
     
     def filter_custom_articles(self, text):
         """根据输入过滤文章列表

@@ -6,7 +6,8 @@ from ..libs.encrypt import encrypt_password
 from ..libs.log import Log
 from ..libs.request import Request
 from ..libs.tools import (
-    is_personal, save_user_info, save_books_info
+    is_personal, save_user_info, save_books_info,
+    get_cache_books_info
 )
 from .parsers import YuqueParser
 from ..libs.exceptions import (
@@ -269,31 +270,55 @@ class YuqueClient:
                         "level": item.get("level", 0),
                     }
                     doc_list.append(doc)
+                
+                # 请求获取额外 type信息
+                try:
+                    books_info = get_cache_books_info()
+                    book_id = None
+                    if books_info:
+                        for b in books_info:
+                            b_namespace = getattr(b, 'namespace', '')
+                            b_user_login = b.user.get('login', '') if hasattr(b, 'user') and isinstance(b.user, dict) else ''
+                            b_slug = getattr(b, 'slug', '')
+                            # 尝试通过 namespace 或 user_login/slug 匹配
+                            if b_namespace == namespace or (b_user_login and b_slug and f"{b_user_login}/{b_slug}" == namespace) or (not b_namespace and hasattr(b, 'user_login') and getattr(b, 'user_login') and b_slug and f"{getattr(b, 'user_login')}/{b_slug}" == namespace):
+                                book_id = b.id
+                                break
+                    
+                    if book_id:
+                        docs_resp = await Request.get(f"{self.config.yuque_article_info}{book_id}", session=self.session)
+                        if docs_resp and "data" in docs_resp and isinstance(docs_resp["data"], list):
+                            type_map = {}
+                            for d in docs_resp["data"]:
+                                t = d.get("type")
+                                if t:
+                                    if d.get("slug"):
+                                        type_map[str(d["slug"])] = t
+                                    if d.get("id"):
+                                        type_map[str(d["id"])] = t
+                            
+                            for doc in doc_list:
+                                t = None
+                                doc_id = doc.get("id")
+                                doc_url = doc.get("url")
+                                doc_slug = doc.get("slug")
+                                
+                                if doc_id: 
+                                    t = t or type_map.get(str(doc_id))
+                                if doc_url: 
+                                    t = t or type_map.get(str(doc_url).strip('/'))
+                                if doc_slug: 
+                                    t = t or type_map.get(str(doc_slug))
+                                    
+                                if t:
+                                    # 将从接口获取到的实际类型覆盖原有的 type
+                                    doc["type"] = t
+
+                except Exception as e:
+                    Log.warn(f"获取知识库文档真实类型失败: {str(e)}")
+                        
                 return doc_list
 
-            # 如果解析失败，尝试从API获取
-            Log.warn("从页面提取TOC失败，尝试从API获取")
-            api_url = f"/api/repos/{namespace}/toc"
-            api_response = await Request.get(api_url, session=self.session)
-            
-            if api_response and "data" in api_response:
-                raw_toc_data = api_response["data"]
-                doc_list = []
-                for item in raw_toc_data:
-                     doc = {
-                        "id": item.get("id", ""),
-                        "slug": item.get("slug", ""),
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "uuid": item.get("uuid", ""),
-                        "type": item.get("type", "doc"),
-                        "parent_uuid": item.get("parent_uuid", ""),
-                        "level": item.get("level", 0),
-                    }
-                     doc_list.append(doc)
-                return doc_list
-
-            return None
 
         except CookiesExpiredError:
             raise
