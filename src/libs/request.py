@@ -87,7 +87,8 @@ class Request:
                     if response.status != 200:
                         Log.error(f"接口请求失败：{url}")
                         Log.error(f"状态码：{response.status}", detailed=True)
-                        Log.debug(f"响应内容：{response_text}")
+                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {response_text}")
 
                     return json.loads(response_text)
@@ -145,7 +146,8 @@ class Request:
                         error_text = content
                         Log.error(f"接口请求失败：{url}")
                         Log.error(f"状态码：{response.status}", detailed=True)
-                        Log.debug(f"响应内容：{error_text}")
+                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {error_text}")
 
                     if is_html and len(content) < 1000:
@@ -203,7 +205,8 @@ class Request:
                         error_text = content
                         Log.error(f"接口请求失败:{url}")
                         Log.error(f"状态码:{response.status}", detailed=True)
-                        Log.debug(f"响应内容:{error_text}")
+                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {error_text}")
 
                     if is_html and len(content) < 1000:
@@ -270,7 +273,8 @@ class Request:
                     if response.status != 200:
                         Log.error(f"接口请求失败：{url}")
                         Log.error(f"状态码：{response.status}", detailed=True)
-                        Log.debug(f"响应内容：{response_text}")
+                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {response_text}")
 
                     return response_data
@@ -281,7 +285,7 @@ class Request:
                 raise
 
     @staticmethod
-    async def put(url: str, data: Dict[str, Any], session: Optional[aiohttp.ClientSession] = None) -> Dict[str, Any]:
+    async def put(url: str, data: Dict[str, Any], session: Optional[aiohttp.ClientSession] = None, persist_cookies: bool = True, return_cookies: bool = False) -> Any:
         """发送PUT请求并返回JSON
         
         Args:
@@ -328,14 +332,18 @@ class Request:
                             for k, v in new_cookie_dict.items():
                                 cookie_dict[k.strip()] = v.strip()
                             merged_cookie_str = "; ".join([f"{k}={v}" for k, v in cookie_dict.items() if k])
-                            save_cookies(merged_cookie_str)
+                            if persist_cookies:
+                                save_cookies(merged_cookie_str)
 
                     if response.status != 200:
                         Log.error(f"接口请求失败：{url}")
                         Log.error(f"状态码：{response.status}", detailed=True)
-                        Log.debug(f"响应内容：{response_text}")
+                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {response_text}")
 
+                    if return_cookies:
+                        return response_data, new_cookie_dict if 'new_cookie_dict' in locals() else {}
                     return response_data
             except aiohttp.ClientError as e:
                 Log.error(f"请求失败：{str(e)}")
