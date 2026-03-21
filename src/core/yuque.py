@@ -374,9 +374,9 @@ class YuqueClient:
                     return api_resp
 
             except Exception as e:
-                Log.warn(f"获取Markdown失败: {str(e)}")
+                Log.warn(f"获取Markdown失败")
             
-            return "无法获取文档内容"
+            return None
         except Exception as e:
             Log.error(f"导出Markdown异常: {str(e)}")
             raise NetworkError(f"导出Markdown异常: {str(e)}")
@@ -430,9 +430,9 @@ class YuqueClient:
                     return api_resp
 
             except Exception as e:
-                Log.warn(f"获取Markdown失败: {str(e)}")
+                Log.warn(f"获取Markdown失败")
             
-            return "无法获取文档内容"
+            return None
         except Exception as e:
             Log.error(f"导出Markdown异常: {str(e)}")
             raise NetworkError(f"导出Markdown异常: {str(e)}")
