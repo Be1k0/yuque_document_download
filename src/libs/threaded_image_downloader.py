@@ -1,5 +1,6 @@
 import os
 import re
+from urllib.parse import urlparse
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
@@ -78,26 +79,26 @@ class ThreadedImageDownloader:
                 image_urls = re.findall(r'https?://[^\s<>"\)\]]+\.(?:png|jpeg|jpg)', line, re.IGNORECASE)
 
                 if image_urls:
-                    image_url = image_urls[0]
-                    image_url = image_url.rstrip('.,;:!?')
-                    if '.png' in image_url:
-                        suffix = '.png'
-                    elif '.jpeg' in image_url:
-                        suffix = '.jpeg'
+                    for image_url in image_urls:
+                        image_url = image_url.rstrip('.,;:!?')
+                        parsed_path = urlparse(image_url).path
+                        suffix = os.path.splitext(parsed_path)[1].lower()
+                        if suffix not in {".png", ".jpeg", ".jpg"}:
+                            suffix = ".png"
 
-                    # 添加到下载任务列表
-                    image_tasks.append((image_url, image_dir, image_rename_mode, idx, suffix, image_file_prefix))
+                        # 添加到下载任务列表
+                        image_tasks.append((image_url, image_dir, image_rename_mode, idx, suffix, image_file_prefix))
 
-                    # 更新文件内容中的图片URL
-                    to_replace = '/'.join(image_url.split('/')[:-1])
-                    new_image_url = image_url.replace(to_replace, 'placeholder')
-                    if image_rename_mode == 'asc':
-                        new_image_url = image_url_prefix + image_file_prefix + str(idx) + suffix
-                    else:
-                        new_image_url = new_image_url.replace('placeholder/', image_url_prefix)
+                        # 更新文件内容中的图片URL
+                        to_replace = '/'.join(image_url.split('/')[:-1])
+                        new_image_url = image_url.replace(to_replace, 'placeholder')
+                        if image_rename_mode == 'asc':
+                            new_image_url = image_url_prefix + image_file_prefix + str(idx) + suffix
+                        else:
+                            new_image_url = new_image_url.replace('placeholder/', image_url_prefix)
 
-                    line = line.replace(image_url, new_image_url)
-                    idx += 1
+                        line = line.replace(image_url, new_image_url)
+                        idx += 1
 
                 output_content.append(line)
 
