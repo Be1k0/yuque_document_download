@@ -107,6 +107,7 @@ class MutualAnswer:
     # 使用线程安全计数器代替普通int,确保并发环境下计数准确
     skipped_count: ThreadSafeCounter = field(default_factory=ThreadSafeCounter)
     downloaded_count: ThreadSafeCounter = field(default_factory=ThreadSafeCounter)
+    failed_count: ThreadSafeCounter = field(default_factory=ThreadSafeCounter)
 
     # 记录当前任务中被成功下载或覆写的文档绝对路径
     downloaded_files: List[str] = field(default_factory=list)
