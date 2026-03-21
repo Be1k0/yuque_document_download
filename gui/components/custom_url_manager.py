@@ -83,20 +83,19 @@ class CustomUrlManagerMixin:
         # 文章列表
         from gui.components.article_manager import ArticleTreeWidget
         self.custom_article_list = ArticleTreeWidget()
-        self.custom_article_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         left_layout.addWidget(self.custom_article_list)
 
         # 操作按钮 (水平布局)
         action_control_layout = QHBoxLayout()
         self.cust_select_all_btn = QPushButton("全选")
         self.cust_select_all_btn.setMinimumWidth(300)
-        self.cust_select_all_btn.clicked.connect(lambda: self.custom_article_list.selectAll())
+        self.cust_select_all_btn.clicked.connect(self.select_all_custom_articles)
         action_control_layout.addWidget(self.cust_select_all_btn)
 
         self.cust_deselect_all_btn = QPushButton("取消选择")
         self.cust_deselect_all_btn.setMinimumWidth(300)
         self.cust_deselect_all_btn.setObjectName("SecondaryButton")
-        self.cust_deselect_all_btn.clicked.connect(lambda: self.custom_article_list.clearSelection())
+        self.cust_deselect_all_btn.clicked.connect(self.deselect_all_custom_articles)
         action_control_layout.addWidget(self.cust_deselect_all_btn)
         
         action_control_layout.addStretch(1)
@@ -241,9 +240,9 @@ class CustomUrlManagerMixin:
         count = len(self.custom_article_list.selectedItems())
         self.cust_download_btn.setEnabled(count > 0)
         if count > 0:
-            self.cust_download_btn.setText(f"导出选中文章 ({count})")
+            self.cust_download_btn.setText(f"开始导出")
         else:
-            self.cust_download_btn.setText("导出选中文章")
+            self.cust_download_btn.setText("开始导出")
         
         # 更新已选数量标签
         if hasattr(self, 'custom_selected_count_label'):
@@ -267,6 +266,10 @@ class CustomUrlManagerMixin:
         self.cust_download_btn.setEnabled(False)
         self.parse_btn.setEnabled(False)
         
+        # 重置进度条格式
+        if hasattr(self, 'progress_bar'):
+             self.progress_bar.setFormat("导出进度: %p%")
+        
         options = {
             "skip": self.custom_skip_local_checkbox.isChecked(),
             "linebreak": self.custom_keep_linebreak_checkbox.isChecked(),
@@ -278,6 +281,8 @@ class CustomUrlManagerMixin:
     def on_custom_download_progress(self, msg):
         """更新下载进度"""
         self.custom_status_label.setText(msg)
+        if hasattr(self, 'progress_bar'):
+             self.progress_bar.setFormat(msg)
 
     def on_custom_download_progress_update(self, current, total):
         """更新进度条数值"""
@@ -295,6 +300,7 @@ class CustomUrlManagerMixin:
         
         if hasattr(self, 'progress_bar'):
              self.progress_bar.setValue(self.progress_bar.maximum())
+             self.progress_bar.setFormat("全部完成!")
         
         # 获取统计信息并显示弹窗
         downloaded = self.custom_url_controller._downloaded_count
@@ -325,6 +331,19 @@ class CustomUrlManagerMixin:
                     
             item.setHidden(not match)
             iterator += 1
+            
+    def select_all_custom_articles(self):
+        """全选当前显示的公开知识库文章"""
+        iterator = QTreeWidgetItemIterator(self.custom_article_list)
+        while iterator.value():
+            item = iterator.value()
+            if not item.isHidden():
+                item.setSelected(True)
+            iterator += 1
+
+    def deselect_all_custom_articles(self):
+        """取消选择所有公开知识库文章"""
+        self.custom_article_list.clearSelection()
     
     def _display_docs_with_hierarchy(self, docs):
         """显示文档列表,支持层级结构"""
@@ -407,24 +426,6 @@ class CustomUrlManagerMixin:
                 from gui.components.article_manager import get_article_icon
                 tree_item.setIcon(0, get_article_icon(item_type, doc))
                 tree_item.setData(0, Qt.ItemDataRole.UserRole, doc)
-    
-    def filter_custom_articles(self, text):
-        """根据输入过滤文章列表
-        
-        Args:
-            text: 输入的过滤文本
-        """
-        filter_text = text.lower()
-        for i in range(self.custom_article_list.count()):
-            item = self.custom_article_list.item(i)
-            doc = item.data(0, Qt.ItemDataRole.UserRole)
-            if doc and isinstance(doc, dict):
-                title = doc.get('title', '').lower()
-                match = filter_text in title
-            else:
-                match = True
-                    
-            item.setHidden(not match)
     
     def select_custom_output_dir(self):
         """选择公开知识库导出导出的输出目录"""
