@@ -2,7 +2,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Any
 from .constants import (
     GLOBAL_CONFIG, LocalCookiesInfo,
     LocalCacheUserInfo, YuqueLoginUserInfo, BookItem
@@ -83,6 +83,39 @@ def get_cache_user_info() -> Optional[YuqueLoginUserInfo]:
 def is_personal() -> bool:
     """判断是否为个人知识库（CLI配置已移除，默认返回True）"""
     return True
+
+
+def resolve_book_namespace(book: Any) -> str:
+    """解析知识库命名空间"""
+    if isinstance(book, dict):
+        namespace = str(book.get("namespace") or "").strip()
+        if namespace:
+            return namespace
+
+        slug = str(book.get("slug") or "").strip()
+        user = book.get("user") or {}
+        if isinstance(user, dict):
+            login = str(user.get("login") or "").strip()
+            if login and slug:
+                return f"{login}/{slug}"
+        return ""
+
+    namespace = str(getattr(book, "namespace", "") or "").strip()
+    if namespace:
+        return namespace
+
+    slug = str(getattr(book, "slug", "") or "").strip()
+    user = getattr(book, "user", None)
+    if isinstance(user, dict):
+        login = str(user.get("login") or "").strip()
+        if login and slug:
+            return f"{login}/{slug}"
+
+    user_login = str(getattr(book, "user_login", "") or "").strip()
+    if user_login and slug:
+        return f"{user_login}/{slug}"
+
+    return ""
 
 
 def save_cookies(cookies: str, expire_time: Optional[int] = None) -> bool:

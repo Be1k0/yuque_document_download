@@ -101,7 +101,7 @@ class MutualAnswer:
     skip: bool
     line_break: bool
 
-    selected_docs: Dict[str, List[str]] = field(default_factory=dict) 
+    selected_docs: Dict[str, List[str]] = field(default_factory=dict)
     progress_callback: Optional[Callable] = None
     
     # 使用线程安全计数器代替普通int,确保并发环境下计数准确

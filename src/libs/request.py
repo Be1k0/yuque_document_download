@@ -146,7 +146,8 @@ class Request:
                         error_text = content
                         Log.error(f"接口请求失败：{url}")
                         Log.error(f"状态码：{response.status}", detailed=True)
-                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        clean_text = error_text.replace('\n', '\\n').replace('\r', '')
+                        Log.info(f"请求失败详情: {target_url}")
                         Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {error_text}")
 
@@ -205,7 +206,8 @@ class Request:
                         error_text = content
                         Log.error(f"接口请求失败:{url}")
                         Log.error(f"状态码:{response.status}", detailed=True)
-                        clean_text = response_text.replace('\n', '\\n').replace('\r', '')
+                        clean_text = error_text.replace('\n', '\\n').replace('\r', '')
+                        Log.info(f"请求失败详情: {target_url}")
                         Log.debug(f"响应内容：{clean_text}")
                         raise Exception(f"HTTP {response.status}: {error_text}")
 

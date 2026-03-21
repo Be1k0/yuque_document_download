@@ -1,4 +1,3 @@
-import sys
 import aiohttp
 from typing import Dict, Any, List, Optional
 from ..libs.constants import GLOBAL_CONFIG
@@ -7,7 +6,7 @@ from ..libs.log import Log
 from ..libs.request import Request
 from ..libs.tools import (
     is_personal, save_user_info, save_books_info,
-    get_cache_books_info
+    get_cache_books_info, resolve_book_namespace
 )
 from .parsers import YuqueParser
 from ..libs.exceptions import (
@@ -162,8 +161,8 @@ class YuqueClient:
                     Log.success("知识库信息保存成功")
                     return {"books_info": merged_books_data}
                 else:
-                    Log.error("文件创建失败")
-                    sys.exit(1)
+                    Log.error("知识库缓存写入失败")
+                    return {"books_info": merged_books_data, "cache_saved": False}
             else:
                 Log.error("获取知识库数据失败")
                 return None
@@ -198,6 +197,7 @@ class YuqueClient:
 
     def _format_book_item(self, book: Dict[str, Any], book_type: str) -> Dict[str, Any]:
         """格式化知识库数据"""
+        namespace = resolve_book_namespace(book)
         return {
             "id": book.get("id", ""),
             "type": book.get("type", ""),
@@ -213,7 +213,7 @@ class YuqueClient:
             "content_updated_at": book.get("content_updated_at", ""),
             "updated_at": book.get("updated_at", ""),
             "created_at": book.get("created_at", ""),
-            "namespace": book.get("namespace", ""),
+            "namespace": namespace,
             "user": book.get("user", {}),
             "book_type": book_type,
         }
@@ -277,11 +277,8 @@ class YuqueClient:
                     book_id = None
                     if books_info:
                         for b in books_info:
-                            b_namespace = getattr(b, 'namespace', '')
-                            b_user_login = b.user.get('login', '') if hasattr(b, 'user') and isinstance(b.user, dict) else ''
-                            b_slug = getattr(b, 'slug', '')
-                            # 尝试通过 namespace 或 user_login/slug 匹配
-                            if b_namespace == namespace or (b_user_login and b_slug and f"{b_user_login}/{b_slug}" == namespace) or (not b_namespace and hasattr(b, 'user_login') and getattr(b, 'user_login') and b_slug and f"{getattr(b, 'user_login')}/{b_slug}" == namespace):
+                            b_namespace = resolve_book_namespace(b)
+                            if b_namespace == namespace:
                                 book_id = b.id
                                 break
                     

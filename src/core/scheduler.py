@@ -6,7 +6,7 @@ from ..libs.constants import GLOBAL_CONFIG, MutualAnswer
 from ..libs.file import File
 from ..libs.log import Log
 from ..libs.tools import (
-    get_cache_books_info, format_filename, ensure_dir_exists
+    get_cache_books_info, format_filename, ensure_dir_exists, resolve_book_namespace
 )
 from ..libs.error_handler import ErrorHandler
 
@@ -35,7 +35,8 @@ class Scheduler:
             # 过滤选中的知识库
             selected_books = []
             for book in books_info:
-                if book.name in answer.toc_range:
+                namespace = resolve_book_namespace(book)
+                if namespace in answer.toc_range:
                     selected_books.append(book)
 
             if not selected_books:
@@ -77,15 +78,7 @@ class Scheduler:
         namespace = ""
 
         # 获取知识库的命名空间
-        if hasattr(book, 'namespace') and book.namespace:
-            namespace = book.namespace
-        elif hasattr(book, 'user_login') and hasattr(book, 'slug'):
-            namespace = f"{book.user_login}/{book.slug}"
-        
-        # 兼容旧版本数据结构
-        if not namespace and hasattr(book, 'user') and hasattr(book, 'slug'):
-            if isinstance(book.user, dict) and 'login' in book.user:
-                namespace = f"{book.user['login']}/{book.slug}"
+        namespace = resolve_book_namespace(book)
 
         if not namespace:
             Log.error(f"知识库 {book.name} 缺少必要的命名空间信息")
@@ -115,12 +108,12 @@ class Scheduler:
 
         # 筛选文档
         filtered_docs = docs
-        if answer.selected_docs and book.name in answer.selected_docs:
-            selected_ids = answer.selected_docs[book.name]
+        if answer.selected_docs and namespace in answer.selected_docs:
+            selected_ids = answer.selected_docs[namespace]
             filtered_docs = [doc for doc in docs if doc.get('id', '') in selected_ids]
-            Log.info(f"下载范围: 选择的 {len(filtered_docs)} 篇特定文档")
+            Log.info(f"下载范围: 知识库 {book.name} 选择了 {len(filtered_docs)} 篇特定文档")
         else:
-            Log.info("下载范围: 所有文档")
+            Log.info(f"下载范围: 知识库 {book.name} 的所有文档")
 
         # 并发下载
         semaphore = asyncio.Semaphore(self.concurrency)
@@ -223,6 +216,10 @@ class Scheduler:
         # 提取slug
         if not doc_url:
             doc_url = doc_slug
+
+        Log.info(
+            f"准备导出文档: 知识库={namespace}, 标题={doc_title}, url={doc.get('url', '')}, slug={doc_slug}, 标识={doc_url}"
+        )
 
         target_dir = book_dir
         if parent_uuid and parent_uuid in level_map:

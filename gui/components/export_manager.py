@@ -38,7 +38,15 @@ class ExportManagerMixin:
             return
 
         try:
-            has_selected_articles = hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs') and self._current_answer.selected_docs
+            selected_namespaces = [
+                item.data(Qt.ItemDataRole.UserRole) for item in selected_items if item.data(Qt.ItemDataRole.UserRole)
+            ]
+            has_selected_articles = (
+                hasattr(self, '_current_answer')
+                and hasattr(self._current_answer, 'selected_docs')
+                and bool(self._current_answer.selected_docs)
+                and set(self._current_answer.selected_docs.keys()).issubset(set(selected_namespaces))
+            )
 
             # 创建并配置MutualAnswer对象
             answer = MutualAnswer(
@@ -52,7 +60,7 @@ class ExportManagerMixin:
                 answer.selected_docs = self._current_answer.selected_docs
                 answer.toc_range = list(answer.selected_docs.keys())
             else:
-                answer.toc_range = [item.data(Qt.ItemDataRole.UserRole + 1) for item in selected_items]
+                answer.toc_range = selected_namespaces
 
             if not answer.toc_range:
                 QMessageBox.warning(self, "错误", "无法确定选中的知识库")
@@ -73,6 +81,16 @@ class ExportManagerMixin:
 
             # 保存answer对象
             self._current_answer = answer
+
+            selected_books_log = []
+            for item in selected_items:
+                selected_books_log.append(
+                    f"{item.data(Qt.ItemDataRole.UserRole + 1)} -> {item.data(Qt.ItemDataRole.UserRole)}"
+                )
+            Log.info(f"导出目标知识库: {', '.join(selected_books_log)}")
+            if has_selected_articles:
+                for namespace, doc_ids in answer.selected_docs.items():
+                    Log.info(f"导出指定文章: {namespace}, 数量: {len(doc_ids)}")
 
             # 设置调试模式
             debug_mode = self.enable_debug_checkbox.isChecked()
