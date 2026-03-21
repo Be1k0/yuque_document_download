@@ -161,6 +161,9 @@ class Scheduler:
         doc_type = doc.get('type', '')
         if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
             Log.info(f"跳过非文档条目: {doc_title}")
+            if answer.progress_callback:
+                answer.progress_callback(f"跳过非文档 ({index}/{total}): {doc_title}")
+            answer.skipped_count.increment()
             return
 
         # 构建路径
@@ -193,13 +196,16 @@ class Scheduler:
 
         Log.info(f"下载文档 ({index}/{total}): {doc_title}")
 
-        await self._download_doc(namespace, doc, book_dir, answer, level_map)
+        success = await self._download_doc(namespace, doc, book_dir, answer, level_map)
         
-        answer.downloaded_count.increment()
+        if success:
+            answer.downloaded_count.increment()
+        else:
+            answer.failed_count.increment()
         
 
     @ErrorHandler.async_error_handler("下载文档IO", reraise=True)
-    async def _download_doc(self, namespace: str, doc: Dict[str, Any], book_dir: str, answer: MutualAnswer, level_map: Dict[str, Dict]) -> None:
+    async def _download_doc(self, namespace: str, doc: Dict[str, Any], book_dir: str, answer: MutualAnswer, level_map: Dict[str, Dict]) -> bool:
         """下载单个文档的具体实现
         
         Args:
@@ -230,9 +236,12 @@ class Scheduler:
 
         # 下载文档
         markdown_content = await self.client.export_markdown(namespace, doc_url, answer.line_break)
-        if not markdown_content:
+        if markdown_content is None:
             Log.warn(f"无法获取内容: {doc_title}")
-            return
+            return False
+
+        if not markdown_content:
+            markdown_content = "\n"
 
         if not answer.line_break:
             markdown_content = markdown_content.replace('</br>', '').replace('<br>', '').replace('<br/>', '')
@@ -245,6 +254,7 @@ class Scheduler:
 
         rel_path = os.path.relpath(file_path, book_dir)
         Log.success(f"保存成功: {rel_path}")
+        return True
 
     def _build_doc_path(self, uuid: str, level_map: Dict[str, Dict]) -> list:
         """构建文档路径
