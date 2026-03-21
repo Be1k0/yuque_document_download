@@ -96,7 +96,7 @@ class DebugLogger:
             },
             "network": {
                 "hostname": socket.gethostname(),
-                "mac_address": ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0,2*6,2)][::-1]),
+                "mac_address": "***MASKED***",
                 "local_ips": [],
                 "public_ip": "Unknown",
                 "dns_resolution": "Unknown",
@@ -127,7 +127,7 @@ class DebugLogger:
                 "cwd_writable": os.access(os.getcwd(), os.W_OK)
             },
             "startup": {
-                "argv": sys.argv
+                "argv": ["***MASKED***"]
             }
         }
         
@@ -175,13 +175,7 @@ class DebugLogger:
         except Exception as e:
             info["network"]["yuque_connectivity"] = f"Failed: {str(e)}"
 
-        # 在子线程或者设置较短超时检测公网IP防卡死
-        try:
-            resp = requests.get("https://api.ipify.org", timeout=2)
-            if resp.status_code == 200:
-                info["network"]["public_ip"] = resp.text.strip()
-        except:
-            pass
+        # 已移除公网IP检测逻辑防止隐私泄漏
             
         # 系统硬件(RAM)、代理与独有组件 (仅 Windows)
         if platform.system() == "Windows":
@@ -242,9 +236,8 @@ class DebugLogger:
                     info["hardware"]["cpu_name"] = cpus[0] if len(cpus) == 1 else cpus
                 # 列出当前系统所有运行中的进程
                 try:
-                    import psutil
-                    proc_names = sorted({p.info['name'] for p in psutil.process_iter(['name']) if p.info['name']})
-                    info["running_processes"] = proc_names
+                    # 已移除进程列表获取防隐私泄漏
+                    info["running_processes"] = ["***MASKED***"]
                 except Exception:
                     pass
             except ImportError:
@@ -311,6 +304,17 @@ class DebugLogger:
         cls._logger.debug(message)
 
     @classmethod
+    def mask_headers(cls, headers: dict) -> dict:
+        """对敏感 HTTP 头进行脱敏处理"""
+        if not headers:
+            return {}
+        masked = dict(headers)
+        for key in masked:
+            if key.lower() in ("cookie", "set-cookie", "authorization"):
+                masked[key] = "***MASKED***"
+        return masked
+
+    @classmethod
     def log_request(cls, url, method, headers, data=None):
         """记录HTTP请求信息
         
@@ -326,7 +330,7 @@ class DebugLogger:
         request_info = {
             "url": url,
             "method": method,
-            "headers": headers,
+            "headers": cls.mask_headers(headers),
             "data": data
         }
 
@@ -355,7 +359,7 @@ class DebugLogger:
 
         response_info = {
             "status_code": status_code,
-            "headers": dict(headers),
+            "headers": cls.mask_headers(dict(headers)),
             "body": response_body
         }
 
