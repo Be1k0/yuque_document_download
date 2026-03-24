@@ -96,7 +96,7 @@ class DebugLogger:
             },
             "network": {
                 "hostname": socket.gethostname(),
-                "mac_address": "***MASKED***",
+                "mac_address": ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0,2*6,2)][::-1]),
                 "local_ips": [],
                 "public_ip": "Unknown",
                 "dns_resolution": "Unknown",

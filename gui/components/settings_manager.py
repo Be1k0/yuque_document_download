@@ -210,6 +210,8 @@ class SettingsManagerMixin:
         elif self.theme_radio_dark.isChecked():
             theme = "dark"
         
+        Log.info(f"UI 主题已变更为: {theme}")
+        
         # 立即应用主题
         THEME_MANAGER.apply_theme(QApplication.instance(), theme)
         self.auto_save_settings()
@@ -230,11 +232,20 @@ class SettingsManagerMixin:
             # 保存其他设置
             # 获取选中的单选按钮文本并转换为底层代码期望的值
             if self.rename_radio1.isChecked():
-                self.image_rename_mode = "asc"  
+                new_image_rename_mode = "asc"  
             else:
-                self.image_rename_mode = "raw"  
-            self.image_file_prefix = self.file_prefix_input.text()
-            self.yuque_cdn_domain = self.cdn_input.text()
+                new_image_rename_mode = "raw"  
+                
+            new_image_file_prefix = self.file_prefix_input.text()
+            new_yuque_cdn_domain = self.cdn_input.text()
+            
+            # 记录设置变更日志
+            if getattr(self, "image_rename_mode", None) != new_image_rename_mode or getattr(self, "image_file_prefix", None) != new_image_file_prefix or getattr(self, "yuque_cdn_domain", None) != new_yuque_cdn_domain:
+                Log.info(f"设置自动保存触发: 重命名模式={new_image_rename_mode}, 图片前缀={new_image_file_prefix}, CDN={new_yuque_cdn_domain}")
+
+            self.image_rename_mode = new_image_rename_mode
+            self.image_file_prefix = new_image_file_prefix
+            self.yuque_cdn_domain = new_yuque_cdn_domain
 
         except ValueError:
             QMessageBox.warning(self, "输入错误", "图片下载线程数只能是1-50之间的数字！")
