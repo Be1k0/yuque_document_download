@@ -1,6 +1,10 @@
 from qasync import asyncSlot
 from PyQt6.QtWidgets import QMessageBox, QListWidgetItem, QTreeWidgetItem
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
+from src.libs.log import Log
+from src.libs.tools import resolve_book_namespace
+from utils import static_resource_path
 
 class BookManagerMixin:
     """知识库管理器类
@@ -54,41 +58,30 @@ class BookManagerMixin:
         owner_books.sort(key=lambda x: x.name)
         other_books.sort(key=lambda x: x.name)
 
+        book_icon = QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-book.svg"))
         # 先添加个人知识库
         for item in owner_books:
-            list_item = QListWidgetItem(f"📚 {item.name}")
+            list_item = QListWidgetItem(item.name)
+            list_item.setIcon(book_icon)
             list_item.setToolTip(f"个人知识库: {item.name}\n包含 {item.items_count} 篇文档")
-            # 存储namespace信息用于后续加载文章
-            namespace = ""
-            if hasattr(item, 'namespace') and item.namespace:
-                namespace = item.namespace
-            elif hasattr(item, 'user_login') and hasattr(item, 'slug'):
-                namespace = f"{item.user_login}/{item.slug}"
-            elif hasattr(item, 'user') and hasattr(item, 'slug'):
-                if isinstance(item.user, dict) and 'login' in item.user:
-                    namespace = f"{item.user['login']}/{item.slug}"
+            namespace = resolve_book_namespace(item)
 
             list_item.setData(Qt.ItemDataRole.UserRole, namespace)
             list_item.setData(Qt.ItemDataRole.UserRole + 1, item.name)
             self.book_list.addItem(list_item)
+            Log.info(f"知识库已加载: {item.name} -> {namespace}")
 
         # 再添加团队知识库
         for item in other_books:
-            list_item = QListWidgetItem(f"📚 {item.name}")
+            list_item = QListWidgetItem(item.name)
+            list_item.setIcon(book_icon)
             list_item.setToolTip(f"团队知识库: {item.name}\n包含 {item.items_count} 篇文档")
-            # 存储namespace信息
-            namespace = ""
-            if hasattr(item, 'namespace') and item.namespace:
-                namespace = item.namespace
-            elif hasattr(item, 'user_login') and hasattr(item, 'slug'):
-                namespace = f"{item.user_login}/{item.slug}"
-            elif hasattr(item, 'user') and hasattr(item, 'slug'):
-                if isinstance(item.user, dict) and 'login' in item.user:
-                    namespace = f"{item.user['login']}/{item.slug}"
+            namespace = resolve_book_namespace(item)
 
             list_item.setData(Qt.ItemDataRole.UserRole, namespace)
             list_item.setData(Qt.ItemDataRole.UserRole + 1, item.name)
             self.book_list.addItem(list_item)
+            Log.info(f"知识库已加载: {item.name} -> {namespace}")
 
         # 记录到日志中
         self.progress_bar.setValue(0)
@@ -118,7 +111,8 @@ class BookManagerMixin:
         filter_text = text.lower()
         for i in range(self.book_list.count()):
             item = self.book_list.item(i)
-            book_name = item.text()[2:].strip().lower()
+            name_data = item.data(Qt.ItemDataRole.UserRole + 1)
+            book_name = name_data.lower() if name_data else item.text().strip().lower()
             item.setHidden(filter_text not in book_name)
 
     def select_all_books(self):

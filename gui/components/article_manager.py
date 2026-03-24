@@ -4,13 +4,16 @@ from PyQt6.QtWidgets import (
     QMessageBox, QAbstractItemView, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator
 )
 from PyQt6.QtCore import Qt, QRect
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QCursor
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QCursor, QIcon
 from PyQt6.QtWidgets import QStyleOptionViewItem
+from src.libs.log import Log
 from src.libs.constants import MutualAnswer
 from src.libs.debug_logger import DebugLogger
+from src.libs.tools import resolve_book_namespace
 from qasync import asyncSlot
 from gui.controllers.article_controller import ArticleController
 from src.ui.theme_manager import THEME_MANAGER
+from utils import static_resource_path
 
 class ArticleTreeWidget(QTreeWidget):
     """文章树控件类
@@ -93,6 +96,25 @@ class ArticleTreeWidget(QTreeWidget):
                 update_children_selection(child, selected)
                 
         update_children_selection(item, is_selected)
+
+
+def get_article_icon(item_type: str, item=None):
+    doc_type = ''
+    if item and isinstance(item, dict):
+        doc_type = item.get('type', '').upper()
+    elif hasattr(item, 'type'):
+        doc_type = getattr(item, 'type', '').upper()
+    
+    if item_type == 'TITLE':
+        return QIcon(static_resource_path("src/ui/themes/resources/icons/folder.svg"))
+    elif doc_type == 'SHEET':
+        return QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-sheet.svg"))
+    elif doc_type == 'TABLE' or doc_type == 'LAKETABLE':
+        return QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-table.svg"))
+    elif doc_type == 'BOARD':
+        return QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-board.svg"))
+    else:
+        return QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-doc.svg"))
 
 class ArticleSelectionDialog(QDialog):
     """文章选择对话框
@@ -239,20 +261,13 @@ class ArticleSelectionDialog(QDialog):
         owner_books.sort(key=lambda x: x.name)
         other_books.sort(key=lambda x: x.name)
 
+        book_icon = QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-book.svg"))
         # 先添加个人知识库
         for item in owner_books:
-            display_name = f"👤 {item.name}"
-            # 存储namespace信息
-            namespace = ""
-            if hasattr(item, 'namespace') and item.namespace:
-                namespace = item.namespace
-            elif hasattr(item, 'user_login') and hasattr(item, 'slug'):
-                namespace = f"{item.user_login}/{item.slug}"
-            elif hasattr(item, 'user') and hasattr(item, 'slug'):
-                if isinstance(item.user, dict) and 'login' in item.user:
-                    namespace = f"{item.user['login']}/{item.slug}"
+            display_name = item.name
+            namespace = resolve_book_namespace(item)
 
-            self.book_dropdown.addItem(display_name)
+            self.book_dropdown.addItem(book_icon, display_name)
 
             # 存储namespace和原始名称到下拉框项的数据中
             index = self.book_dropdown.count() - 1
@@ -261,16 +276,8 @@ class ArticleSelectionDialog(QDialog):
 
         # 再添加团队知识库
         for item in other_books:
-            display_name = f"👥 {item.name}"
-            # 存储namespace信息
-            namespace = ""
-            if hasattr(item, 'namespace') and item.namespace:
-                namespace = item.namespace
-            elif hasattr(item, 'user_login') and hasattr(item, 'slug'):
-                namespace = f"{item.user_login}/{item.slug}"
-            elif hasattr(item, 'user') and hasattr(item, 'slug'):
-                if isinstance(item.user, dict) and 'login' in item.user:
-                    namespace = f"{item.user['login']}/{item.slug}"
+            display_name = item.name
+            namespace = resolve_book_namespace(item)
 
             self.book_dropdown.addItem(display_name)
 
@@ -307,6 +314,7 @@ class ArticleSelectionDialog(QDialog):
         # 更新当前知识库信息
         self.current_namespace = namespace
         self.current_book_name = book_name
+        Log.info(f"对话框加载文章: {book_name} -> {namespace}")
 
         # 更新状态
         self.status_label.setText(f"正在加载知识库 {book_name} 的文章...")
@@ -395,15 +403,14 @@ class ArticleSelectionDialog(QDialog):
                         title = item.get('title', 'Untitled')
                         item_type = item.get('type', 'DOC').upper()
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}" 
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         if parent_item == self.article_list:
                             tree_item = QTreeWidgetItem(self.article_list, [display_title])
                         else:
                             tree_item = QTreeWidgetItem(parent_item, [display_title])
+                        
+                        tree_item.setIcon(0, get_article_icon(item_type, item))
                         
                         # 设置样式
                         font = QFont()
@@ -416,8 +423,8 @@ class ArticleSelectionDialog(QDialog):
                         tree_item.setData(0, Qt.ItemDataRole.UserRole + 1, item)
                         
                         # 检查是否已经选择过该文章
-                        if self.current_book_name in self.selected_articles and \
-                                item.get('id', '') in self.selected_articles[self.current_book_name]:
+                        if self.current_namespace in self.selected_articles and \
+                                item.get('id', '') in self.selected_articles[self.current_namespace]:
                             tree_item.setSelected(True)
                         
                         # 递归添加子项
@@ -442,12 +449,10 @@ class ArticleSelectionDialog(QDialog):
                             item_type = getattr(article, 'type', 'DOC').upper()
                             article_id = getattr(article, 'id', '')
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}"
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         tree_item = QTreeWidgetItem(self.article_list, [display_title])
+                        tree_item.setIcon(0, get_article_icon(item_type, article))
                         
                         font = QFont()
                         if item_type == 'TITLE':
@@ -457,8 +462,8 @@ class ArticleSelectionDialog(QDialog):
                         tree_item.setData(0, Qt.ItemDataRole.UserRole, article_id)
                         tree_item.setData(0, Qt.ItemDataRole.UserRole + 1, article)
 
-                        if self.current_book_name in self.selected_articles and \
-                                article_id in self.selected_articles[self.current_book_name]:
+                        if self.current_namespace in self.selected_articles and \
+                                article_id in self.selected_articles[self.current_namespace]:
                             tree_item.setSelected(True)
 
                     except:
@@ -539,7 +544,7 @@ class ArticleSelectionDialog(QDialog):
         count = len(self.article_list.selectedItems())
         self.selected_article_count_label.setText(f"已选: {count}")
 
-        if self.current_book_name:
+        if self.current_namespace:
             selected_ids = []
             for item in self.article_list.selectedItems():
                 article_id = item.data(0, Qt.ItemDataRole.UserRole)
@@ -547,9 +552,9 @@ class ArticleSelectionDialog(QDialog):
                     selected_ids.append(article_id)
             
             if selected_ids:
-                self.selected_articles[self.current_book_name] = selected_ids
-            elif self.current_book_name in self.selected_articles:
-                del self.selected_articles[self.current_book_name]
+                self.selected_articles[self.current_namespace] = selected_ids
+            elif self.current_namespace in self.selected_articles:
+                del self.selected_articles[self.current_namespace]
             
             self.update_total_selected()
 
@@ -586,14 +591,7 @@ class ArticleSelectionDialog(QDialog):
         total = len(self.books_info)
         
         for item in self.books_info:
-            namespace = ""
-            if hasattr(item, 'namespace') and item.namespace:
-                namespace = item.namespace
-            elif hasattr(item, 'user_login') and hasattr(item, 'slug'):
-                namespace = f"{item.user_login}/{item.slug}"
-            elif hasattr(item, 'user') and hasattr(item, 'slug'):
-                if isinstance(item.user, dict) and 'login' in item.user:
-                    namespace = f"{item.user['login']}/{item.slug}"
+            namespace = resolve_book_namespace(item)
             
             if namespace:
                 self.status_label.setText(f"正在加载({count+1}/{total}): {item.name}")
@@ -603,7 +601,9 @@ class ArticleSelectionDialog(QDialog):
                 
                 docs = await self.controller.get_articles(namespace)
                 if docs:
-                    self.selected_articles[namespace] = docs
+                    self.selected_articles[namespace] = [
+                        doc.get('id') for doc in docs if isinstance(doc, dict) and doc.get('id')
+                    ]
             count += 1
 
         self.status_label.setText(
@@ -640,7 +640,7 @@ class ArticleManagerMixin:
             selected_articles = dialog.get_selected_articles()
             if selected_articles:
                 # 计算总选择数量
-                total_articles = sum(len(ids) for book, ids in selected_articles.items())
+                total_articles = sum(len(ids) for _, ids in selected_articles.items())
                 DebugLogger.log_debug(f"已选择 {total_articles} 篇文章进行下载")
 
                 # 存储选择的文章ID
@@ -653,7 +653,7 @@ class ArticleManagerMixin:
                 self._current_answer.selected_docs = selected_articles
 
                 # 如果用户选择了文章，自动将相应的知识库添加到选择列表中
-                selected_book_names = list(selected_articles.keys())
+                selected_namespaces = list(selected_articles.keys())
 
                 # 清除知识库列表上的当前选择
                 self.book_list.clearSelection()
@@ -661,8 +661,8 @@ class ArticleManagerMixin:
                 # 选择包含所选文章的知识库
                 for i in range(self.book_list.count()):
                     item = self.book_list.item(i)
-                    book_name = item.text()[2:].strip()
-                    if book_name in selected_book_names:
+                    namespace = item.data(Qt.ItemDataRole.UserRole)
+                    if namespace in selected_namespaces:
                         item.setSelected(True)
 
                 # 更新已选知识库数量
@@ -697,7 +697,8 @@ class ArticleManagerMixin:
         # 如果只选中一个知识库，加载其文章列表
         if len(selected_items) == 1:
             item = selected_items[0]
-            book_name = item.text()[2:].strip()
+            name_data = item.data(Qt.ItemDataRole.UserRole + 1)
+            book_name = name_data if name_data else item.text().strip()
             namespace = item.data(Qt.ItemDataRole.UserRole)
             if not namespace:
                 self.article_list.clear()
@@ -734,6 +735,7 @@ class ArticleManagerMixin:
         # 更新状态
         self.current_namespace = namespace
         self.current_book_name = book_name
+        Log.info(f"主界面加载文章: {book_name} -> {namespace}")
 
         # 更新状态
         self.status_label.setText(f"正在加载知识库 {book_name} 的文章...")
@@ -827,15 +829,14 @@ class ArticleManagerMixin:
                         item_type = item.get('type', 'DOC').upper()
                         updated_at = item.get('updated_at', '')
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}"
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         if parent_item == self.article_list:
                             tree_item = QTreeWidgetItem(self.article_list, [display_title])
                         else:
                             tree_item = QTreeWidgetItem(parent_item, [display_title])
+                        
+                        tree_item.setIcon(0, get_article_icon(item_type, item))
                         
                         font = QFont()
                         if item_type == 'TITLE':
@@ -856,8 +857,8 @@ class ArticleManagerMixin:
                         tree_item.setData(0, Qt.ItemDataRole.UserRole + 1, item)
                         
                         if hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs') and \
-                                book_name in self._current_answer.selected_docs and \
-                                item.get('id', '') in self._current_answer.selected_docs[book_name]:
+                                self.current_namespace in self._current_answer.selected_docs and \
+                                item.get('id', '') in self._current_answer.selected_docs[self.current_namespace]:
                             tree_item.setSelected(True)
                         
                         if 'children' in item and item['children']:
@@ -880,12 +881,10 @@ class ArticleManagerMixin:
                             title = getattr(article, 'title', 'Untitled')
                             item_type = getattr(article, 'type', 'DOC').upper()
                         
-                        if item_type == 'TITLE':
-                            display_title = f"📁 {title}"
-                        else:
-                            display_title = f"📄 {title}"
+                        display_title = title
                         
                         tree_item = QTreeWidgetItem(self.article_list, [display_title])
+                        tree_item.setIcon(0, get_article_icon(item_type, article))
                         
                         font = QFont()
                         if item_type == 'TITLE':
@@ -988,7 +987,7 @@ class ArticleManagerMixin:
             self.selected_article_count_label.setText(f"已选: {count}")
 
             # 如果有文章被选中，则创建或更新MutualAnswer对象来存储选中的文章
-            if hasattr(self, 'current_book_name') and self.current_book_name:
+            if hasattr(self, 'current_namespace') and self.current_namespace:
                 # 获取当前选中的所有文章ID
                 selected_ids = []
                 for item in self.article_list.selectedItems():
@@ -1007,14 +1006,18 @@ class ArticleManagerMixin:
 
                 # 更新选中状态
                 if selected_ids:
-                    self._current_answer.selected_docs[self.current_book_name] = selected_ids
+                    self._current_answer.selected_docs[self.current_namespace] = selected_ids
                     if hasattr(self, 'log_handler'):
-                        DebugLogger.log_debug(f"已选择 {len(selected_ids)} 篇 {self.current_book_name} 的文章")
-                elif self.current_book_name in self._current_answer.selected_docs:
+                        DebugLogger.log_debug(
+                            f"已选择 {len(selected_ids)} 篇文章: {self.current_book_name} -> {self.current_namespace}"
+                        )
+                        Log.info(f"已选择 {len(selected_ids)} 篇文章: {self.current_book_name} -> {self.current_namespace}")
+                elif self.current_namespace in self._current_answer.selected_docs:
                     # 如果没有选中任何文章，从已选字典中删除该知识库
-                    del self._current_answer.selected_docs[self.current_book_name]
+                    del self._current_answer.selected_docs[self.current_namespace]
                     if hasattr(self, 'log_handler'):
-                        DebugLogger.log_debug(f"已清除 {self.current_book_name} 的所有选择")
+                        DebugLogger.log_debug(f"已清除文章选择: {self.current_book_name} -> {self.current_namespace}")
+                        Log.info(f"已清除文章选择: {self.current_book_name} -> {self.current_namespace}")
 
                 # 计算并显示总共选择的文章数量
                 if hasattr(self, '_current_answer') and hasattr(self._current_answer, 'selected_docs'):
@@ -1059,9 +1062,12 @@ class ArticleManagerMixin:
         info_item.setFont(0, QFont("Arial", 10, QFont.Weight.Bold))
 
         # 显示选中的知识库
+        book_icon = QIcon(static_resource_path("src/ui/themes/resources/icons/yuque-book.svg"))
         for item in selected_items:
-            book_name = item.text()[2:].strip()
-            book_item = QTreeWidgetItem(self.article_list, [f"📚 {book_name}"])
+            name_data = item.data(Qt.ItemDataRole.UserRole + 1)
+            book_name = name_data if name_data else item.text().strip()
+            book_item = QTreeWidgetItem(self.article_list, [book_name])
+            book_item.setIcon(0, book_icon)
             book_item.setFlags(Qt.ItemFlag.NoItemFlags)
 
         # 添加提示信息

@@ -54,7 +54,7 @@ class GlobalConfig:
     yuque_space_books_info: str = "/api/mine/user_books?user_type=Group" # 团队空间知识库接口
     yuque_collab_books_info: str = "/api/mine/raw_collab_books" # 协作知识库接口
     group_resource_base_info: str = "/api/mine/group_quick_links" # 团队知识库接口
-    yuque_export_markdown: str = ""
+    yuque_article_info: str = "/api/docs?book_id=" # 知识库文章列表接口
     meta_dir: str = get_resource_path(".meta") # 程序临时文件目录
     target_output_dir: str = get_resource_path("./docs") # 默认下载目录
     target_resource_dir: str = get_resource_path("./resources") # 资源文件目录
@@ -101,12 +101,13 @@ class MutualAnswer:
     skip: bool
     line_break: bool
 
-    selected_docs: Dict[str, List[str]] = field(default_factory=dict) 
+    selected_docs: Dict[str, List[str]] = field(default_factory=dict)
     progress_callback: Optional[Callable] = None
     
     # 使用线程安全计数器代替普通int,确保并发环境下计数准确
     skipped_count: ThreadSafeCounter = field(default_factory=ThreadSafeCounter)
     downloaded_count: ThreadSafeCounter = field(default_factory=ThreadSafeCounter)
+    failed_count: ThreadSafeCounter = field(default_factory=ThreadSafeCounter)
 
     # 记录当前任务中被成功下载或覆写的文档绝对路径
     downloaded_files: List[str] = field(default_factory=list)

@@ -191,6 +191,30 @@ QCheckBox::indicator:checked {
     image: url(@icon_check);
 }
 
+/* 单选框样式 */
+QRadioButton {
+    spacing: 8px;
+    color: @text_color;
+}
+
+QRadioButton::indicator {
+    width: 14px;
+    height: 14px;
+    margin: 2px;
+    border: 1px solid @border_color;
+    border-radius: 8px;
+    background-color: @input_background;
+}
+
+QRadioButton::indicator:unchecked:hover {
+    border-color: @primary_color;
+}
+
+QRadioButton::indicator:checked {
+    border: 1px solid @primary_color;
+    background-color: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.35, fx: 0.5, fy: 0.5, stop: 0 @primary_color, stop: 0.45 @primary_color, stop: 0.55 @input_background, stop: 1.0 @input_background);
+}
+
 /* 列表和表格共通设定 */
 QListWidget, QTableWidget, QTreeWidget {
     background-color: @input_background;

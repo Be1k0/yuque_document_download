@@ -259,7 +259,7 @@ class CustomUrlController(BaseController):
             payload = {"password": encrypted_password}
             
             try:
-                verify_resp = await Request.put(verify_url, payload)
+                verify_resp, response_cookies = await Request.put(verify_url, payload, persist_cookies=False, return_cookies=True)
             except Exception as req_e:
                 error_body = str(req_e)
                 if "400" in error_body:
@@ -267,19 +267,13 @@ class CustomUrlController(BaseController):
                 else:
                     raise req_e
             
-            # 由于 Request.put 会在自动接收到 Set-Cookie 时保存到本地配置里
-            # 获取最新的本地 Cookies
-            from src.libs.tools import get_local_cookies
-            cookies_str = get_local_cookies()
             self._temp_cookies = {}
-            if cookies_str:
-                for item in cookies_str.split(';'):
-                    if '=' in item:
-                         k, v = item.split('=', 1)
-                         k = k.strip()
-                         # 过滤 _yuque_session，因为带密码的公开知识库一旦携带该字段会导致解析失败
-                         if k != '_yuque_session':
-                             self._temp_cookies[k] = v.strip()
+            if response_cookies:
+                for k, v in response_cookies.items():
+                    k = k.strip()
+                    # 过滤 _yuque_session，因为带密码的公开知识库一旦携带该字段会导致解析失败
+                    if k != '_yuque_session':
+                         self._temp_cookies[k] = v.strip()
 
             filtered_cookies_str = "; ".join([f"{k}={v}" for k, v in self._temp_cookies.items()])
 
@@ -356,6 +350,41 @@ class CustomUrlController(BaseController):
                     }
                     doc_list.append(doc)
                 
+                # 获取文档真实类型
+                book_id = book_data["book"].get("id")
+                if book_id:
+                    try:
+                        import json
+                        cookies_str = "; ".join([f"{k}={v}" for k, v in cookies.items()]) if cookies else ""
+                        api_url = f"/api/docs?book_id={book_id}"
+                        docs_resp_text = await Request.get_text_with_cookies(api_url, cookies_str, is_html=False)
+                        docs_resp = json.loads(docs_resp_text)
+                        
+                        if docs_resp and "data" in docs_resp and isinstance(docs_resp["data"], list):
+                            type_map = {}
+                            for d in docs_resp["data"]:
+                                t = d.get("type")
+                                if t:
+                                    if d.get("slug"):
+                                        type_map[str(d["slug"])] = t
+                                    if d.get("id"):
+                                        type_map[str(d["id"])] = t
+                            
+                            for doc in doc_list:
+                                t = None
+                                doc_id = doc.get("id")
+                                doc_url = doc.get("url")
+                                doc_slug = doc.get("slug")
+                                
+                                if doc_id: t = t or type_map.get(str(doc_id))
+                                if doc_url: t = t or type_map.get(str(doc_url).strip('/'))
+                                if doc_slug: t = t or type_map.get(str(doc_slug))
+                                
+                                if t:
+                                    doc["type"] = t
+                    except Exception as e:
+                        self.log_error(f"获取知识库文档真实类型失败: {e}")
+                
                 self.log_success(f"成功解析 {len(doc_list)} 篇文档")
                 self.parse_finished.emit(doc_list)
             else:
@@ -395,10 +424,23 @@ class CustomUrlController(BaseController):
         self.download_started.emit()
         self.log_info(f"开始下载 {len(docs)} 篇文档到 {output_dir}")
         self.download_progress.emit(f"开始下载 {len(docs)} 篇文档...")
+        self.download_progress_update.emit(0, len(docs))
         
         try:
             ensure_dir_exists(output_dir)
             
+            # 构建文档层级映射表
+            level_map = {}
+            for doc in docs:
+                uuid = doc.get('uuid', '')
+                if uuid:
+                    level_map[uuid] = {
+                        'title': doc.get('title', ''),
+                        'level': doc.get('level', 0),
+                        'type': doc.get('type', 'DOC'),
+                        'parent_uuid': doc.get('parent_uuid', '')
+                    }
+
             # 准备图片下载器
             image_downloader = None
             if download_images:
@@ -415,66 +457,17 @@ class CustomUrlController(BaseController):
                 cookies_str = "; ".join([f"{name}={value}" for name, value in self._temp_cookies.items()])
                 
                 async with YuqueClient() as client:
-                    await self._download_docs_with_custom_cookies(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str)
+                    await self._download_docs_with_custom_cookies(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map)
             else:
                 async with YuqueClient() as client:
-                    await self._download_docs_with_client(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader)
-
-                total = len(docs)
-                for i, doc in enumerate(docs, 1):
-                    title = doc.get("title", "Untitled")
-                    slug = doc.get("slug", "")
-                    url = doc.get("url", "")
-                    
-                    identifier = url if url else slug
-                    if not identifier:
-                        continue
-                        
-                    filename = format_filename(title) + ".md"
-                    file_path = os.path.join(output_dir, filename)
-
-                    # 跳过已存在的文档
-                    if skip_existing and os.path.exists(file_path):
-                        self.log_info(f"跳过已存在文档: {title}")
-                        self.download_progress.emit(f"({i}/{total}) 跳过: {title}")
-                        continue
-
-                    self.download_progress.emit(f"正在下载 ({i}/{total}): {title}")
-                    self.download_progress_update.emit(i, total)
-                    
-                    namespace = doc.get("namespace", "unknown/unknown") 
-                    
-                    # 导出 Markdown
-                    try:
-                        content = await client.export_markdown(namespace, identifier, line_break=linebreak)
-                    except Exception as e:
-                        self.log_error(f"导出文档失败 [{title}]: {e}")
-                        continue
-                    
-                    if content:
-                        File().write(file_path, content)
-                        
-                        # 下载图片
-                        if download_images and image_downloader:
-                            self.download_progress.emit(f"正在处理图片 ({i}/{total}): {title}")
-                            await asyncio.to_thread(
-                                image_downloader.process_single_file,
-                                md_file_path=file_path,
-                                image_url_prefix='',
-                                image_rename_mode='asc'
-                            )
-                    
-                self.log_success("所有任务处理完成")
-                self.download_progress.emit("下载完成!")
-                self.download_progress_update.emit(total, total)
-                self.download_finished.emit()
+                    await self._download_docs_with_client(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, level_map)
 
         except Exception as e:
             self.log_error(f"下载过程出错: {str(e)}")
             self.download_progress.emit(f"下载过程出错: {str(e)}")
             self.download_finished.emit()
     
-    async def _download_docs_with_client(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader):
+    async def _download_docs_with_client(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, level_map):
         """使用指定的client下载文档
         
         Args:
@@ -485,6 +478,7 @@ class CustomUrlController(BaseController):
             linebreak: 是否保留换行标识
             download_images: 是否下载图片
             image_downloader: 图片下载器实例
+            level_map: 层级映射表
         """
         total = len(docs)
         for i, doc in enumerate(docs, 1):
@@ -496,16 +490,43 @@ class CustomUrlController(BaseController):
             if not identifier:
                 continue
                 
+            doc_type = doc.get('type', '')
+            if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
+                self.log_info(f"跳过非文档条目: {title}")
+                self.download_progress.emit(f"跳过非文档 ({i}/{total}): {title}")
+                self.download_progress_update.emit(i, total)
+                self._skipped_count += 1
+                continue
+                
+            # 根据层级计算目标文件夹
+            target_dir = output_dir
+            parent_uuid = doc.get('parent_uuid', '')
+            if parent_uuid and parent_uuid in level_map:
+                path_parts = self._build_doc_path(parent_uuid, level_map)
+                if path_parts:
+                    target_dir = os.path.join(output_dir, *path_parts)
+                    ensure_dir_exists(target_dir)
+
             filename = format_filename(title) + ".md"
-            file_path = os.path.join(output_dir, filename)
+            file_path = os.path.join(target_dir, filename)
 
             # 跳过已存在的文件
-            if skip_existing and os.path.exists(file_path):
-                self.log_info(f"跳过已存在: {title}")
-                self.download_progress.emit(f"跳过 ({i}/{total}): {title}")
-                self.download_progress_update.emit(i, total)
-                self._skipped_count += 1  # 更新跳过计数
-                continue
+            if skip_existing:
+                skip_it = False
+                if os.path.exists(file_path):
+                    skip_it = True
+                else:
+                    folder_name = os.path.splitext(filename)[0]
+                    subdir_file_path = os.path.join(target_dir, folder_name, filename)
+                    if os.path.exists(subdir_file_path):
+                        skip_it = True
+                
+                if skip_it:
+                    self.log_info(f"跳过已存在: {title}")
+                    self.download_progress.emit(f"跳过 ({i}/{total}): {title}")
+                    self.download_progress_update.emit(i, total)
+                    self._skipped_count += 1  # 更新跳过计数
+                    continue
 
             # 获取namespace
             namespace = doc.get("namespace", "unknown/unknown")
@@ -552,7 +573,7 @@ class CustomUrlController(BaseController):
         # 发送统计信息
         self._emit_download_stats()
     
-    async def _download_docs_with_custom_cookies(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str):
+    async def _download_docs_with_custom_cookies(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map):
         """使用自定义Cookie字符串下载文档
         
         Args:
@@ -564,6 +585,7 @@ class CustomUrlController(BaseController):
             download_images: 是否下载图片
             image_downloader: 图片下载器实例
             cookies_str: 自定义Cookie字符串
+            level_map: 层级映射表
         """
         total = len(docs)
         for i, doc in enumerate(docs, 1):
@@ -575,16 +597,43 @@ class CustomUrlController(BaseController):
             if not identifier:
                 continue
                 
+            doc_type = doc.get('type', '')
+            if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
+                self.log_info(f"跳过非文档条目: {title}")
+                self.download_progress.emit(f"跳过非文档 ({i}/{total}): {title}")
+                self.download_progress_update.emit(i, total)
+                self._skipped_count += 1
+                continue
+                
+            # 根据层级计算目标文件夹
+            target_dir = output_dir
+            parent_uuid = doc.get('parent_uuid', '')
+            if parent_uuid and parent_uuid in level_map:
+                path_parts = self._build_doc_path(parent_uuid, level_map)
+                if path_parts:
+                    target_dir = os.path.join(output_dir, *path_parts)
+                    ensure_dir_exists(target_dir)
+
             filename = format_filename(title) + ".md"
-            file_path = os.path.join(output_dir, filename)
+            file_path = os.path.join(target_dir, filename)
 
             # 跳过已存在的文件
-            if skip_existing and os.path.exists(file_path):
-                self.log_info(f"跳过已存在: {title}")
-                self.download_progress.emit(f"跳过 ({i}/{total}): {title}")
-                self.download_progress_update.emit(i, total)
-                self._skipped_count += 1  # 更新跳过计数
-                continue
+            if skip_existing:
+                skip_it = False
+                if os.path.exists(file_path):
+                    skip_it = True
+                else:
+                    folder_name = os.path.splitext(filename)[0]
+                    subdir_file_path = os.path.join(target_dir, folder_name, filename)
+                    if os.path.exists(subdir_file_path):
+                        skip_it = True
+                
+                if skip_it:
+                    self.log_info(f"跳过已存在: {title}")
+                    self.download_progress.emit(f"跳过 ({i}/{total}): {title}")
+                    self.download_progress_update.emit(i, total)
+                    self._skipped_count += 1  # 更新跳过计数
+                    continue
 
             # 获取namespace
             namespace = doc.get("namespace", "unknown/unknown")
@@ -637,3 +686,16 @@ class CustomUrlController(BaseController):
         self.log_info(stats_msg.replace('\n', ', '))
         self.download_finished.emit()
 
+    def _build_doc_path(self, uuid: str, level_map: dict) -> list:
+        """根据 parent_uuid 递归构建文档的相对路径列表"""
+        if uuid not in level_map:
+            return []
+        doc_info = level_map[uuid]
+        doc_type = doc_info.get('type', 'DOC')
+        if doc_type.upper() not in ['TITLE', 'DOC']:
+            return []
+        
+        title = format_filename(doc_info['title'])
+        parent_uuid = level_map.get(uuid, {}).get('parent_uuid', '')
+        parent_path = self._build_doc_path(parent_uuid, level_map)
+        return parent_path + [title]
