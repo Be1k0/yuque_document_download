@@ -103,8 +103,6 @@ class UpdateManager:
             "User-Agent": "yuque-document-download-updater",
         }
 
-        Log.info(f"开始检查更新: {self._api_url}")
-
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(self._api_url, ssl=False if GLOBAL_CONFIG.disable_ssl else None) as response:
                 response_text = await response.text()
@@ -125,8 +123,7 @@ class UpdateManager:
             asset=asset,
         )
 
-        Log.info(f"检查更新完成: 当前远端版本 {release_info.tag_name}")
-        Log.info(f"匹配到更新资源: name={release_info.asset.name}, label={release_info.asset.label}")
+        Log.info(f"软件最新版本为 {release_info.tag_name}")
         return release_info
 
     def _select_release_asset(self, assets: list[dict]) -> Optional[ReleaseAsset]:

@@ -482,10 +482,6 @@ class SettingsManagerMixin:
                     GLOBAL_CONFIG.update_proxy_base_url = self.update_proxy_base_url
 
                 self.update_proxy_input.setEnabled(self.enable_update_proxy)
-                Log.info(
-                    f"程序更新设置已加载: 启用加速={self.enable_update_proxy}, "
-                    f"加速地址={self.update_proxy_base_url or '直连'}"
-                )
 
             # 设置主题单选按钮状态
             if theme == "dark":
@@ -560,10 +556,94 @@ class SettingsManagerMixin:
         dialog.show()
         self._update_progress_dialog = dialog
 
+    def trigger_startup_update_check(self):
+        """触发启动后的自动更新检查"""
+        if getattr(self, "_startup_update_check_triggered", False):
+            return
+        self._startup_update_check_triggered = True
+        self._startup_update_check_task = self.auto_check_update_on_startup()
+
+    def _is_update_check_running(self) -> bool:
+        """判断当前是否正在执行更新检查"""
+        return getattr(self, "_update_check_running", False)
+
+    async def _run_update_check(self, current_version: str, show_progress_dialog: bool = False, silent_error: bool = False):
+        """执行更新检查"""
+        if self._is_update_check_running():
+            Log.info("已有更新检查任务正在执行，已跳过新的检查请求")
+            return None
+
+        previous_suppress = getattr(self, "_suppress_update_error_dialog", False)
+        self._update_check_running = True
+        self._suppress_update_error_dialog = silent_error
+
+        if show_progress_dialog:
+            self._show_update_progress_dialog("检查更新", "正在检查最新版本...")
+
+        try:
+            return await self.update_controller.check_for_updates(current_version)
+        finally:
+            if show_progress_dialog:
+                self._close_update_progress_dialog()
+            self._suppress_update_error_dialog = previous_suppress
+            self._update_check_running = False
+
+    async def _prompt_update_for_release(self, release_info, check_source: str):
+        """提示用户是否更新到指定版本"""
+        source_text = "启动时" if check_source == "startup" else "手动检查时"
+
+        if not self.update_controller.manager.is_packaged_app():
+            QMessageBox.information(
+                self,
+                "发现新版本",
+                f"{source_text}检测到新版本 {release_info.tag_name}。\n\n当前为源码运行模式，仅支持检测，不支持自动替换程序。",
+            )
+            Log.info(f"{source_text}发现新版本，但当前为源码运行模式，更新功能不可用")
+            return
+
+        update_reply = QMessageBox.question(
+            self,
+            "发现新版本",
+            f"{source_text}检测到新版本 {release_info.tag_name}，是否立即下载并更新？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if update_reply != QMessageBox.StandardButton.Yes:
+            Log.info(f"{source_text}发现新版本后，用户选择暂不更新: {release_info.tag_name}")
+            return
+
+        Log.info(f"{source_text}发现新版本后，用户选择立即更新: {release_info.tag_name}")
+        await self.start_program_update()
+
+    @asyncSlot()
+    async def auto_check_update_on_startup(self):
+        """程序启动后自动检查更新"""
+        from main import __version__
+
+        if self._is_update_check_running():
+            return
+
+        Log.info("检查软件是否为最新版本")
+        release_info = await self._run_update_check(__version__, show_progress_dialog=False, silent_error=True)
+
+        if self.update_controller.last_check_failed:
+            Log.warn(f"程序启动后自动检查更新失败: {self.update_controller.last_check_error_message}")
+            return
+
+        if release_info is None:
+            Log.info(f"程序启动后自动检查更新完成: 当前已是最新版本")
+            return
+
+        await self._prompt_update_for_release(release_info, "startup")
+
     @asyncSlot()
     async def on_version_label_clicked(self):
         """点击版本号后检查更新"""
         from main import __version__
+
+        if self._is_update_check_running():
+            QMessageBox.information(self, "检查更新", "当前正在检查更新，请稍候。")
+            return
 
         reply = QMessageBox.question(
             self,
@@ -575,38 +655,15 @@ class SettingsManagerMixin:
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        self._show_update_progress_dialog("检查更新", "正在检查最新版本...")
-        try:
-            release_info = await self.update_controller.check_for_updates(__version__)
-        except Exception:
-            self._close_update_progress_dialog()
-            return
-
-        self._close_update_progress_dialog()
+        release_info = await self._run_update_check(__version__, show_progress_dialog=True, silent_error=False)
 
         if release_info is None:
+            if self.update_controller.last_check_failed:
+                return
             QMessageBox.information(self, "检查更新", f"当前已是最新版本: {__version__}")
             return
 
-        if not self.update_controller.manager.is_packaged_app():
-            QMessageBox.information(
-                self,
-                "发现新版本",
-                f"检测到新版本 {release_info.tag_name}。\n\n当前为源码运行模式，仅支持检测，不支持自动替换程序。",
-            )
-            return
-
-        update_reply = QMessageBox.question(
-            self,
-            "发现新版本",
-            f"检测到新版本 {release_info.tag_name}，是否立即下载并更新？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if update_reply != QMessageBox.StandardButton.Yes:
-            return
-
-        await self.start_program_update()
+        await self._prompt_update_for_release(release_info, "manual")
 
     async def start_program_update(self):
         """下载并启动更新"""
@@ -636,6 +693,9 @@ class SettingsManagerMixin:
     def on_update_error(self, message):
         """处理更新错误"""
         self._close_update_progress_dialog()
+        if getattr(self, "_suppress_update_error_dialog", False):
+            Log.warn(f"已静默处理更新错误: {message}")
+            return
         QMessageBox.warning(self, "更新失败", message)
 
     def on_update_cancelled(self, message):

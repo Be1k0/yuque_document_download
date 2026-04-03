@@ -19,15 +19,18 @@ class UpdateController(BaseController):
         self.manager = manager or UpdateManager()
         self.latest_release_info: ReleaseInfo | None = None
         self._cancel_requested = False
+        self.last_check_failed = False
+        self.last_check_error_message = ""
 
     async def check_for_updates(self, current_version: str) -> ReleaseInfo | None:
         """检查是否有新版本"""
+        self.last_check_failed = False
+        self.last_check_error_message = ""
         try:
             release_info = await self.manager.fetch_latest_release()
             self.latest_release_info = release_info
 
             if self.manager.is_newer_version(current_version, release_info.tag_name):
-                self.log_info(f"检测到新版本: {release_info.tag_name}")
                 self.update_available.emit(release_info)
                 return release_info
 
@@ -37,6 +40,8 @@ class UpdateController(BaseController):
             return None
         except Exception as exc:
             message = f"检查更新失败: {exc}"
+            self.last_check_failed = True
+            self.last_check_error_message = message
             self.log_error("检查更新失败", exc)
             self.update_error.emit(message)
             return None

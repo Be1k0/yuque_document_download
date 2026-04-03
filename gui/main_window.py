@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QProgressBar, QTabWidget, QSplitter, QSizePolicy, QAbstractItemView
 )
 from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.libs.constants import GLOBAL_CONFIG
 from utils import static_resource_path, StdoutRedirector, QPasswordLineEdit
 from .components.login_manager import LoginManagerMixin
@@ -87,6 +87,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 检查Cookie
         self.check_login_status()
+        QTimer.singleShot(1200, self.trigger_startup_update_check)
 
     def closeEvent(self, event):
         """当窗口关闭时恢复标准输出流"""
