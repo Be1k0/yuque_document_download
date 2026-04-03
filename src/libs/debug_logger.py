@@ -252,7 +252,9 @@ class DebugLogger:
             info["startup"]["config_summary"] = {
                 "yuque_host": getattr(cfg, "yuque_host", ""),
                 "target_output_dir": getattr(cfg, "target_output_dir", ""),
-                "disable_ssl": getattr(cfg, "disable_ssl", False)
+                "disable_ssl": getattr(cfg, "disable_ssl", False),
+                "enable_update_proxy": getattr(cfg, "enable_update_proxy", True),
+                "update_proxy_base_url": getattr(cfg, "update_proxy_base_url", "")
             }
         except Exception as e:
             info["startup"]["config_error"] = str(e)

@@ -64,6 +64,11 @@ class GlobalConfig:
     local_expire: int = 86400000  # 1天过期时间
     duration: int = 500  # 下载频率
     disable_ssl: bool = False  # 是否禁用 SSL 证书检验
+    github_repo_url: str = "https://github.com/Be1k0/yuque_document_download"  # 项目仓库地址
+    github_latest_release_api: str = "https://api.github.com/repos/Be1k0/yuque_document_download/releases/latest"  # 最新版本接口
+    enable_update_proxy: bool = True  # 是否启用程序更新下载加速
+    update_proxy_base_url: str = "https://gh-proxy.org/"  # 程序更新下载加速地址
+    update_temp_dir: str = get_resource_path(".meta/updater")  # 更新临时目录
 
 
 @dataclass

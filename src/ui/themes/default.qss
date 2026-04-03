@@ -100,6 +100,29 @@ QPushButton#DangerButton {
     background-color: @danger_color;
 }
 
+QPushButton#VersionButton {
+    color: @text_secondary;
+    margin-top: 10px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    font-size: 13px;
+    font-weight: normal;
+}
+
+QPushButton#VersionButton:hover {
+    color: @primary_color;
+    background-color: transparent;
+    border: none;
+}
+
+QPushButton#VersionButton:pressed {
+    color: @primary_color;
+    background-color: transparent;
+    border: none;
+}
+
 /* 输入框样式 */
 QLineEdit {
     background-color: @input_background;
@@ -318,6 +341,36 @@ QProgressBar::chunk {
     border-radius: 5px;
 }
 
+QProgressDialog#UpdateProgressDialog {
+    background-color: @panel_background;
+    border: 1px solid @border_color;
+    border-radius: 10px;
+}
+
+QProgressDialog#UpdateProgressDialog QLabel {
+    min-width: 390px;
+    color: @text_color;
+    font-size: 13px;
+    padding: 8px 4px 12px 4px;
+}
+
+QProgressBar#UpdateProgressBar {
+    min-height: 14px;
+    border: 1px solid @border_color;
+    border-radius: 7px;
+    background-color: @list_selected_bg;
+    text-align: center;
+    color: @text_secondary;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QProgressBar#UpdateProgressBar::chunk {
+    background-color: @primary_color;
+    border-radius: 6px;
+    margin: 1px;
+}
+
 QStatusBar {
     background-color: @panel_background;
     color: @text_secondary;
@@ -377,4 +430,3 @@ QMessageBox QLabel {
 QMessageBox QPushButton {
     min-width: 60px;
 }
-

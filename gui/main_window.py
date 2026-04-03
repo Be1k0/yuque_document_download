@@ -71,6 +71,8 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.yuque_cdn_domain = 'cdn.nlark.com'  # 语雀CDN域名
         self.enable_debug = False  # 调试模式
         self.disable_ssl = GLOBAL_CONFIG.disable_ssl # 禁用SSL验证
+        self.enable_update_proxy = GLOBAL_CONFIG.enable_update_proxy  # 程序更新下载加速
+        self.update_proxy_base_url = GLOBAL_CONFIG.update_proxy_base_url  # 程序更新加速地址
 
         # 初始化用户界面
         self.init_ui()

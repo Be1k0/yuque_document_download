@@ -1,20 +1,52 @@
 import os
+import asyncio
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, 
     QRadioButton, QButtonGroup, QCheckBox, QMessageBox, QPushButton,
-    QApplication, QTextBrowser, QSizePolicy
+    QApplication, QTextBrowser, QSizePolicy, QProgressDialog, QProgressBar
 )
 from PyQt6.QtGui import QFont, QPixmap, QIntValidator
 from PyQt6.QtCore import Qt
+from qasync import asyncSlot
 from src.libs.log import Log
 from utils import static_resource_path, create_circular_pixmap
 from src.ui.theme_manager import THEME_MANAGER
+
+
+class CenteredUpdateProgressDialog(QProgressDialog):
+    """取消按钮居中的更新进度弹窗"""
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._center_cancel_button()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._center_cancel_button()
+
+    def _center_cancel_button(self):
+        button = self.findChild(QPushButton)
+        if button is None or not button.isVisible():
+            return
+        button.move(max((self.width() - button.width()) // 2, 0), button.y())
+
 
 class SettingsManagerMixin:
     """设置管理器类
     
     提供一个界面让用户调整软件的各种设置，包括主题、下载线程数、图片重命名模式等。
     """
+    @property
+    def update_controller(self):
+        """获取更新控制器实例"""
+        if not hasattr(self, '_update_controller'):
+            from gui.controllers.update_controller import UpdateController
+            self._update_controller = UpdateController()
+            self._update_controller.update_error.connect(self.on_update_error)
+            self._update_controller.update_cancelled.connect(self.on_update_cancelled)
+            self._update_controller.download_progress.connect(self.on_update_download_progress)
+        return self._update_controller
+
     def create_settings_page(self):
         """创建设置页面"""
         settings_page = QWidget()
@@ -154,6 +186,27 @@ class SettingsManagerMixin:
         self.disable_ssl_checkbox.stateChanged.connect(self.toggle_disable_ssl)
         debug_layout.addWidget(self.disable_ssl_checkbox)
 
+        self.enable_update_proxy_checkbox = QCheckBox("使用程序更新下载加速")
+        self.enable_update_proxy_checkbox.setToolTip("仅影响程序更新时的安装包下载，不影响版本检查接口")
+        self.enable_update_proxy_checkbox.setChecked(self.enable_update_proxy)
+        self.enable_update_proxy_checkbox.stateChanged.connect(self.toggle_update_proxy)
+        debug_layout.addWidget(self.enable_update_proxy_checkbox)
+
+        update_proxy_layout = QHBoxLayout()
+        update_proxy_label = QLabel("更新加速地址:")
+        update_proxy_label.setMinimumWidth(100)
+        self.update_proxy_input = QLineEdit(self.update_proxy_base_url)
+        self.update_proxy_input.setMaximumWidth(280)
+        self.update_proxy_input.textChanged.connect(self.auto_save_settings)
+        update_proxy_help = QLabel("(留空则直连 GitHub 下载)")
+        update_proxy_help.setStyleSheet("color: #6c757d; font-size: 12px;")
+        update_proxy_layout.addWidget(update_proxy_label)
+        update_proxy_layout.addWidget(self.update_proxy_input)
+        update_proxy_layout.addWidget(update_proxy_help)
+        update_proxy_layout.addStretch()
+        debug_layout.addLayout(update_proxy_layout)
+        self.update_proxy_input.setEnabled(self.enable_update_proxy)
+
         debug_group.setLayout(debug_layout)
         settings_layout.addWidget(debug_group)
 
@@ -238,14 +291,24 @@ class SettingsManagerMixin:
                 
             new_image_file_prefix = self.file_prefix_input.text()
             new_yuque_cdn_domain = self.cdn_input.text()
+            new_update_proxy_base_url = self.update_proxy_input.text().strip()
             
             # 记录设置变更日志
-            if getattr(self, "image_rename_mode", None) != new_image_rename_mode or getattr(self, "image_file_prefix", None) != new_image_file_prefix or getattr(self, "yuque_cdn_domain", None) != new_yuque_cdn_domain:
-                Log.info(f"设置自动保存触发: 重命名模式={new_image_rename_mode}, 图片前缀={new_image_file_prefix}, CDN={new_yuque_cdn_domain}")
+            if (
+                getattr(self, "image_rename_mode", None) != new_image_rename_mode or
+                getattr(self, "image_file_prefix", None) != new_image_file_prefix or
+                getattr(self, "yuque_cdn_domain", None) != new_yuque_cdn_domain or
+                getattr(self, "update_proxy_base_url", None) != new_update_proxy_base_url
+            ):
+                Log.info(
+                    f"设置自动保存触发: 重命名模式={new_image_rename_mode}, 图片前缀={new_image_file_prefix}, "
+                    f"CDN={new_yuque_cdn_domain}, 更新加速地址={new_update_proxy_base_url or '直连'}"
+                )
 
             self.image_rename_mode = new_image_rename_mode
             self.image_file_prefix = new_image_file_prefix
             self.yuque_cdn_domain = new_yuque_cdn_domain
+            self.update_proxy_base_url = new_update_proxy_base_url
 
         except ValueError:
             QMessageBox.warning(self, "输入错误", "图片下载线程数只能是1-50之间的数字！")
@@ -280,7 +343,9 @@ class SettingsManagerMixin:
                 'image_file_prefix': self.image_file_prefix,
                 'yuque_cdn_domain': self.yuque_cdn_domain,
                 'enable_debug': self.enable_debug,
-                'disable_ssl': self.disable_ssl
+                'disable_ssl': self.disable_ssl,
+                'enable_update_proxy': self.enable_update_proxy,
+                'update_proxy_base_url': self.update_proxy_base_url,
             }
             
             # 保存到文件
@@ -293,6 +358,13 @@ class SettingsManagerMixin:
             # 更新全局配置
             from src.libs.constants import GLOBAL_CONFIG
             GLOBAL_CONFIG.disable_ssl = self.disable_ssl
+            GLOBAL_CONFIG.enable_update_proxy = self.enable_update_proxy
+            GLOBAL_CONFIG.update_proxy_base_url = self.update_proxy_base_url
+
+            Log.info(
+                f"程序更新设置已保存: 启用加速={self.enable_update_proxy}, "
+                f"加速地址={self.update_proxy_base_url or '直连'}"
+            )
             
             if self.enable_debug:
                 try:
@@ -397,6 +469,24 @@ class SettingsManagerMixin:
                     from src.libs.constants import GLOBAL_CONFIG
                     GLOBAL_CONFIG.disable_ssl = self.disable_ssl
 
+                if 'enable_update_proxy' in settings:
+                    self.enable_update_proxy = settings['enable_update_proxy']
+                    self.enable_update_proxy_checkbox.setChecked(self.enable_update_proxy)
+                    from src.libs.constants import GLOBAL_CONFIG
+                    GLOBAL_CONFIG.enable_update_proxy = self.enable_update_proxy
+
+                if 'update_proxy_base_url' in settings:
+                    self.update_proxy_base_url = settings['update_proxy_base_url']
+                    self.update_proxy_input.setText(self.update_proxy_base_url)
+                    from src.libs.constants import GLOBAL_CONFIG
+                    GLOBAL_CONFIG.update_proxy_base_url = self.update_proxy_base_url
+
+                self.update_proxy_input.setEnabled(self.enable_update_proxy)
+                Log.info(
+                    f"程序更新设置已加载: 启用加速={self.enable_update_proxy}, "
+                    f"加速地址={self.update_proxy_base_url or '直连'}"
+                )
+
             # 设置主题单选按钮状态
             if theme == "dark":
                 self.theme_radio_dark.setChecked(True)
@@ -435,6 +525,144 @@ class SettingsManagerMixin:
             state: 复选框状态
         """
         self.disable_ssl = state == Qt.CheckState.Checked.value or state == Qt.CheckState.Checked
+
+    def toggle_update_proxy(self, state):
+        """处理更新下载加速切换"""
+        self.enable_update_proxy = state == Qt.CheckState.Checked.value or state == Qt.CheckState.Checked
+        self.update_proxy_input.setEnabled(self.enable_update_proxy)
+        Log.info(f"程序更新下载加速已{'启用' if self.enable_update_proxy else '关闭'}")
+
+    def _close_update_progress_dialog(self):
+        """关闭更新进度弹窗"""
+        dialog = getattr(self, "_update_progress_dialog", None)
+        if dialog is not None:
+            dialog.close()
+            dialog.deleteLater()
+            self._update_progress_dialog = None
+
+    def _show_update_progress_dialog(self, title: str, text: str, allow_cancel: bool = False):
+        """显示更新进度弹窗"""
+        self._close_update_progress_dialog()
+        cancel_text = "取消下载" if allow_cancel else None
+        dialog = CenteredUpdateProgressDialog(text, cancel_text, 0, 0, self)
+        dialog.setObjectName("UpdateProgressDialog")
+        dialog.setWindowTitle(title)
+        dialog.setMinimumDuration(0)
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.setMinimumWidth(460)
+        progress_bar = dialog.findChild(QProgressBar)
+        if progress_bar is not None:
+            progress_bar.setObjectName("UpdateProgressBar")
+        if allow_cancel:
+            dialog.canceled.connect(self.on_update_dialog_canceled)
+        dialog.show()
+        self._update_progress_dialog = dialog
+
+    @asyncSlot()
+    async def on_version_label_clicked(self):
+        """点击版本号后检查更新"""
+        from main import __version__
+
+        reply = QMessageBox.question(
+            self,
+            "检查更新",
+            f"当前版本为 {__version__}，是否检查最新版本？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self._show_update_progress_dialog("检查更新", "正在检查最新版本...")
+        try:
+            release_info = await self.update_controller.check_for_updates(__version__)
+        except Exception:
+            self._close_update_progress_dialog()
+            return
+
+        self._close_update_progress_dialog()
+
+        if release_info is None:
+            QMessageBox.information(self, "检查更新", f"当前已是最新版本: {__version__}")
+            return
+
+        if not self.update_controller.manager.is_packaged_app():
+            QMessageBox.information(
+                self,
+                "发现新版本",
+                f"检测到新版本 {release_info.tag_name}。\n\n当前为源码运行模式，仅支持检测，不支持自动替换程序。",
+            )
+            return
+
+        update_reply = QMessageBox.question(
+            self,
+            "发现新版本",
+            f"检测到新版本 {release_info.tag_name}，是否立即下载并更新？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if update_reply != QMessageBox.StandardButton.Yes:
+            return
+
+        await self.start_program_update()
+
+    async def start_program_update(self):
+        """下载并启动更新"""
+        from main import __version__
+
+        if not self.update_controller.manager.is_packaged_app():
+            QMessageBox.information(self, "提示", "当前为源码运行模式，仅支持检测更新，不支持自动替换程序。")
+            return
+
+        self._show_update_progress_dialog("程序更新", "正在下载更新文件...", allow_cancel=True)
+
+        script_path = await self.update_controller.download_and_prepare_update(__version__)
+        if script_path:
+            dialog = getattr(self, "_update_progress_dialog", None)
+            if dialog is not None:
+                dialog.setLabelText("更新文件已准备完成，程序即将退出并重启...")
+                dialog.setRange(0, 1)
+                dialog.setValue(1)
+            self.update_controller.launch_update(script_path)
+            QApplication.processEvents()
+            await asyncio.sleep(0.5)
+            QApplication.instance().quit()
+            return
+
+        self._close_update_progress_dialog()
+
+    def on_update_error(self, message):
+        """处理更新错误"""
+        self._close_update_progress_dialog()
+        QMessageBox.warning(self, "更新失败", message)
+
+    def on_update_cancelled(self, message):
+        """处理更新取消"""
+        self._close_update_progress_dialog()
+        QMessageBox.information(self, "已取消", message)
+
+    def on_update_dialog_canceled(self):
+        """处理更新弹窗取消动作"""
+        dialog = getattr(self, "_update_progress_dialog", None)
+        if dialog is not None:
+            dialog.setLabelText("正在取消下载，请稍候...")
+        self.update_controller.request_cancel()
+
+    def on_update_download_progress(self, current, total, asset_name):
+        """更新下载进度显示"""
+        dialog = getattr(self, "_update_progress_dialog", None)
+        if dialog is None:
+            return
+
+        dialog.setRange(0, max(total, 1))
+        dialog.setValue(min(current, max(total, 1)))
+        if total > 0:
+            percent = int(current / total * 100)
+            dialog.setLabelText(f"正在下载 {asset_name}\n{percent}% ({current}/{total})")
+        else:
+            dialog.setLabelText(f"正在下载 {asset_name}")
 
     def create_about_page(self):
         """创建关于页面"""
@@ -579,10 +807,11 @@ class SettingsManagerMixin:
 
         # 版本信息
         from main import __version__
-        version_label = QLabel(f"版本: {__version__}")
-        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        version_label.setFont(QFont("", 13))
-        version_label.setStyleSheet("color: @text_secondary; margin-top: 10px;")
-        about_layout.addWidget(version_label)
+        self.version_button = QPushButton(f"版本: {__version__}")
+        self.version_button.setObjectName("VersionButton")
+        self.version_button.setFlat(True)
+        self.version_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.version_button.clicked.connect(self.on_version_label_clicked)
+        about_layout.addWidget(self.version_button, alignment=Qt.AlignmentFlag.AlignCenter)
 
         return about_page
