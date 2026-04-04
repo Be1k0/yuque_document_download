@@ -132,7 +132,7 @@ class LoginManagerMixin:
         """网页登录完成后的回调"""
         self.web_login_button.setEnabled(True)
         self.web_login_button.setText("网页端登录")
-        self._show_async_message_box(QMessageBox.Icon.Information, "登录成功", "成功登录到语雀账号")
+        self._show_async_message_box(QMessageBox.Icon.Information, "登录成功", "成功登录到语雀账号" + "\u00A0" * 25)
 
         # 显示用户信息，隐藏登录表单
         self.show_user_info()
@@ -163,14 +163,14 @@ class LoginManagerMixin:
         self.login_button.setText("登录")
 
         if result:
-            self._show_async_message_box(QMessageBox.Icon.Information, "登录成功", "成功登录到语雀账号")
+            self._show_async_message_box(QMessageBox.Icon.Information, "登录成功", "成功登录到语雀账号" + "\u00A0" * 25)
             self.show_user_info()
             tabs = self.findChild(QTabWidget)
             if tabs:
                 tabs.setCurrentIndex(1)
             self.load_books()
         else:
-            self._show_async_message_box(QMessageBox.Icon.Warning, "登录失败", "登录失败，请检查用户名和密码")
+            self._show_async_message_box(QMessageBox.Icon.Warning, "登录失败", "登录失败，请检查用户名和密码" + "\u00A0" * 25)
 
     def on_login_error(self, error_msg):
         """登录出错的回调
@@ -393,7 +393,7 @@ class LoginManagerMixin:
                     tabs.setCurrentIndex(0)
 
                 if not force:
-                    QMessageBox.information(self, "注销成功", "已成功注销账号")
+                    QMessageBox.information(self, "注销成功", "已成功注销账号" + "\u00A0" * 25)
 
             except Exception as e:
                 QMessageBox.critical(self, "注销失败", f"注销过程中出错: {str(e)}")

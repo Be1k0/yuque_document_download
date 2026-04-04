@@ -373,7 +373,7 @@ class SettingsManagerMixin:
                 except ImportError as e:
                     self.log_handler.emit_log(f"无法导入调试日志模块: {str(e)}")
             
-            QMessageBox.information(self, "保存成功", "设置已成功保存！")
+            QMessageBox.information(self, "保存成功", "设置已成功保存！" + "\u00A0" * 25)
         except Exception as e:
             QMessageBox.critical(self, "保存失败", f"保存设置时出错: {str(e)}")
             Log.error(f"保存设置时出错: {e}")

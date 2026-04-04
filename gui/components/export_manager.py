@@ -52,7 +52,11 @@ class ExportManagerMixin:
             answer = MutualAnswer(
                 toc_range=[],
                 skip=self.skip_local_checkbox.isChecked(),
-                line_break=self.keep_linebreak_checkbox.isChecked()
+                line_break=self.keep_linebreak_checkbox.isChecked(),
+                doc_format=self.doc_format_combo.currentData(),
+                board_format=self.board_format_combo.currentData(),
+                sheet_format=self.sheet_format_combo.currentData(),
+                table_format=self.table_format_combo.currentData()
             )
 
             # 设置知识库列表
@@ -202,12 +206,18 @@ class ExportManagerMixin:
         # 统计信息
         downloaded = answer.downloaded_count.get()
         skipped = answer.skipped_count.get()
+        failed = getattr(answer, 'failed_count', None)
+        failed_count = failed.get() if failed else 0
         
         msg = f"下载文档数：{downloaded}\n跳过文档数：{skipped}"
+        if failed_count > 0:
+            msg += f"\n失败文档数：{failed_count}"
+            
         if self.download_images_checkbox.isChecked():
             msg += f"\n图片下载数: {self._total_downloaded_images}"
             
-        self.log_handler.emit_log(f"任务完成! 下载: {downloaded}, 跳过: {skipped}, 图片: {self._total_downloaded_images}")
+        self.log_handler.emit_log(f"任务完成! 下载: {downloaded}, 跳过: {skipped}, 失败: {failed_count}, 图片: {self._total_downloaded_images}")
+        msg += "\u00A0" * 25
         QMessageBox.information(self, "导出完成", msg)
 
     def _on_image_download_progress(self, downloaded, total, current_filename):
