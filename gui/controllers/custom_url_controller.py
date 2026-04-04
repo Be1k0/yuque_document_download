@@ -451,24 +451,42 @@ class CustomUrlController(BaseController):
             # 使用 YuqueClient 下载文档内容
             if self._temp_cookies is not None:
                 if self._temp_cookies:
-                    self.log_info("使用缓存Cookie进行下载")
+                    self.log_info("使用缓存与本地登录Cookie进行下载")
                 else:
-                    self.log_info("使用空Cookie进行下载")
+                    self.log_info("使用空与本地登录Cookie进行下载")
                     
-                cookies_str = "; ".join([f"{name}={value}" for name, value in self._temp_cookies.items()])
+                # 合并本地登录 Cookie 以防 _temp_cookies 丢失 _yuque_session 导致401等问题
+                merged_cookies_dict = {}
+                try:
+                    from src.libs.tools import get_local_cookies
+                    loc_cookies = get_local_cookies()
+                    if loc_cookies:
+                        for item in loc_cookies.split(';'):
+                            if '=' in item:
+                                k, v = item.split('=', 1)
+                                merged_cookies_dict[k.strip()] = v.strip()
+                except Exception:
+                    pass
+                
+                # 覆盖入 temp_cookies (temp_cookies 优先级更高，比如新得到的权限cookie)
+                if self._temp_cookies:
+                    for k, v in self._temp_cookies.items():
+                        merged_cookies_dict[k.strip()] = str(v).strip()
+                        
+                cookies_str = "; ".join([f"{name}={value}" for name, value in merged_cookies_dict.items() if name])
                 
                 async with YuqueClient() as client:
-                    await self._download_docs_with_custom_cookies(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map)
+                    await self._download_docs_with_custom_cookies(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map, options)
             else:
                 async with YuqueClient() as client:
-                    await self._download_docs_with_client(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, level_map)
+                    await self._download_docs_with_client(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, level_map, options)
 
         except Exception as e:
             self.log_error(f"下载过程出错: {str(e)}")
             self.download_progress.emit(f"下载过程出错: {str(e)}")
             self.download_finished.emit()
     
-    async def _download_docs_with_client(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, level_map):
+    async def _download_docs_with_client(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, level_map, options=None):
         """使用指定的client下载文档
         
         Args:
@@ -480,7 +498,9 @@ class CustomUrlController(BaseController):
             download_images: 是否下载图片
             image_downloader: 图片下载器实例
             level_map: 层级映射表
+            options: 导出选项
         """
+        options = options or {}
         total = len(docs)
         for i, doc in enumerate(docs, 1):
             title = doc.get("title", "Untitled")
@@ -492,7 +512,16 @@ class CustomUrlController(BaseController):
                 continue
                 
             doc_type = doc.get('type', '')
-            if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
+            doc_type_u = doc_type.upper() if doc_type else 'DOC'
+            valid_types = ['DOC', 'DOCUMENT', 'BOARD']
+            
+            if doc_type_u in ['SHEET', 'TABLE']:
+                self.log_info(f"公开知识库不支持导出此类文档: {title} ({doc_type})")
+                self.download_progress.emit(f"不支持导出 ({i}/{total}): {title}")
+                self.download_progress_update.emit(i, total)
+                self._skipped_count += 1
+                continue
+            elif doc_type_u not in valid_types:
                 self.log_info(f"跳过非文档条目: {title}")
                 self.download_progress.emit(f"跳过非文档 ({i}/{total}): {title}")
                 self.download_progress_update.emit(i, total)
@@ -508,7 +537,15 @@ class CustomUrlController(BaseController):
                     target_dir = os.path.join(output_dir, *path_parts)
                     ensure_dir_exists(target_dir)
 
-            filename = format_filename(title) + ".md"
+            doc_type_u = doc_type.upper() if doc_type else 'DOC'
+            ext = '.md'
+            if doc_type_u == 'BOARD':
+                ext = '.png'
+            elif doc_type_u in ['SHEET', 'TABLE']:
+                fmt = options.get('sheet_format' if doc_type_u == 'SHEET' else 'table_format', 'XLSX (Excel)')
+                ext = '.xlsx' if 'XLSX' in str(fmt).upper() else '.md'
+
+            filename = format_filename(title) + ext
             file_path = os.path.join(target_dir, filename)
 
             # 跳过已存在的文件
@@ -535,17 +572,25 @@ class CustomUrlController(BaseController):
             try:
                 self.download_progress.emit(f"正在下载 ({i}/{total}): {title}")
                 
-                # 导出 Markdown
-                content = await client.export_markdown(namespace, identifier, line_break=linebreak)
-                
-                if content:
-                    # 保存文件
-                    File().write(file_path, content)
+                success_flag = False
+                if doc_type_u == 'BOARD':
+                    full_url = url if url.startswith('http') else f"https://www.yuque.com/{namespace}/{identifier}"
+                    success_flag = await client.export_board_png(full_url, file_path)
+                elif doc_type_u in ['SHEET', 'TABLE'] and ext == '.xlsx':
+                    doc_id = str(doc.get('id', ''))
+                    success_flag = await client.export_excel(doc_id, file_path, is_table=(doc_type_u == 'TABLE')) if doc_id else False
+                else:
+                    content = await client.export_markdown(namespace, identifier, line_break=linebreak)
+                    if content:
+                        File().write(file_path, content)
+                        success_flag = True
+
+                if success_flag:
                     self.log_success(f"已保存: {title}")
                     self._downloaded_count += 1  # 更新成功计数
                     
-                    # 下载图片
-                    if download_images and image_downloader:
+                    # 下载图片 (仅Markdown支持)
+                    if download_images and image_downloader and ext == '.md':
                         self.download_progress.emit(f"正在处理图片 ({i}/{total}): {title}")
                         await asyncio.to_thread(
                             image_downloader.process_single_file,
@@ -574,7 +619,7 @@ class CustomUrlController(BaseController):
         # 发送统计信息
         self._emit_download_stats()
     
-    async def _download_docs_with_custom_cookies(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map):
+    async def _download_docs_with_custom_cookies(self, client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map, options=None):
         """使用自定义Cookie字符串下载文档
         
         Args:
@@ -587,7 +632,9 @@ class CustomUrlController(BaseController):
             image_downloader: 图片下载器实例
             cookies_str: 自定义Cookie字符串
             level_map: 层级映射表
+            options: 导出选项
         """
+        options = options or {}
         total = len(docs)
         for i, doc in enumerate(docs, 1):
             title = doc.get("title", "Untitled")
@@ -599,7 +646,16 @@ class CustomUrlController(BaseController):
                 continue
                 
             doc_type = doc.get('type', '')
-            if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
+            doc_type_u = doc_type.upper() if doc_type else 'DOC'
+            valid_types = ['DOC', 'DOCUMENT', 'BOARD']
+            
+            if doc_type_u in ['SHEET', 'TABLE']:
+                self.log_info(f"公开知识库不支持导出此类文档: {title} ({doc_type})")
+                self.download_progress.emit(f"不支持导出 ({i}/{total}): {title}")
+                self.download_progress_update.emit(i, total)
+                self._skipped_count += 1
+                continue
+            elif doc_type_u not in valid_types:
                 self.log_info(f"跳过非文档条目: {title}")
                 self.download_progress.emit(f"跳过非文档 ({i}/{total}): {title}")
                 self.download_progress_update.emit(i, total)
@@ -615,7 +671,15 @@ class CustomUrlController(BaseController):
                     target_dir = os.path.join(output_dir, *path_parts)
                     ensure_dir_exists(target_dir)
 
-            filename = format_filename(title) + ".md"
+            doc_type_u = doc_type.upper() if doc_type else 'DOC'
+            ext = '.md'
+            if doc_type_u == 'BOARD':
+                ext = '.png'
+            elif doc_type_u in ['SHEET', 'TABLE']:
+                fmt = options.get('sheet_format' if doc_type_u == 'SHEET' else 'table_format', 'XLSX (Excel)')
+                ext = '.xlsx' if 'XLSX' in str(fmt).upper() else '.md'
+
+            filename = format_filename(title) + ext
             file_path = os.path.join(target_dir, filename)
 
             # 跳过已存在的文件
@@ -642,17 +706,25 @@ class CustomUrlController(BaseController):
             try:
                 self.download_progress.emit(f"正在下载 ({i}/{total}): {title}")
                 
-                # 使用自定义Cookie导出 Markdown
-                content = await client.export_markdown_with_cookies(namespace, identifier, cookies_str, line_break=linebreak)
-                
-                if content:
-                    # 保存文件
-                    File().write(file_path, content)
+                success_flag = False
+                if doc_type_u == 'BOARD':
+                    full_url = url if url.startswith('http') else f"https://www.yuque.com/{namespace}/{identifier}"
+                    success_flag = await client.export_board_png(full_url, file_path, cookies_str)
+                elif doc_type_u in ['SHEET', 'TABLE'] and ext == '.xlsx':
+                    doc_id = str(doc.get('id', ''))
+                    success_flag = await client.export_excel(doc_id, file_path, cookies_str, is_table=(doc_type_u == 'TABLE')) if doc_id else False
+                else:
+                    content = await client.export_markdown_with_cookies(namespace, identifier, cookies_str, line_break=linebreak)
+                    if content:
+                        File().write(file_path, content)
+                        success_flag = True
+
+                if success_flag:
                     self.log_success(f"已保存: {title}")
                     self._downloaded_count += 1  # 更新成功计数
                     
                     # 下载图片
-                    if download_images and image_downloader:
+                    if download_images and image_downloader and ext == '.md':
                         self.download_progress.emit(f"正在处理图片 ({i}/{total}): {title}")
                         await asyncio.to_thread(
                             image_downloader.process_single_file,

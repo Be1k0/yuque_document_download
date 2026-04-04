@@ -117,6 +117,10 @@ class MutualAnswer:
     toc_range: List[str]
     skip: bool
     line_break: bool
+    doc_format: str = "md"
+    board_format: str = "png"
+    sheet_format: str = "xlsx"
+    table_format: str = "xlsx"
 
     selected_docs: Dict[str, List[str]] = field(default_factory=dict)
     progress_callback: Optional[Callable] = None

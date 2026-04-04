@@ -18,7 +18,7 @@ class Scheduler:
     
     def __init__(self, client: YuqueClient = None):
         self.client = client or default_client
-        self.concurrency = 5
+        self.concurrency = 10
 
     async def start_download_task(self, answer: MutualAnswer) -> None:
         """开始下载任务
@@ -152,7 +152,8 @@ class Scheduler:
             return
 
         doc_type = doc.get('type', '')
-        if doc_type and doc_type.upper() != 'DOC' and doc_type.lower() != 'document':
+        valid_types = ['DOC', 'DOCUMENT', 'BOARD', 'SHEET', 'TABLE']
+        if doc_type and doc_type.upper() not in valid_types:
             Log.info(f"跳过非文档条目: {doc_title}")
             if answer.progress_callback:
                 answer.progress_callback(f"跳过非文档 ({index}/{total}): {doc_title}")
@@ -167,7 +168,16 @@ class Scheduler:
             if path_parts:
                 target_dir = os.path.join(book_dir, *path_parts)
 
-        filename = format_filename(doc_title) + '.md'
+        # 获取扩展名
+        doc_type_u = doc_type.upper()
+        ext = '.md'
+        if doc_type_u == 'BOARD':
+            ext = '.png'
+        elif doc_type_u in ['SHEET', 'TABLE']:
+            fmt = getattr(answer, 'sheet_format' if doc_type_u == 'SHEET' else 'table_format', 'XLSX (Excel)')
+            ext = '.xlsx' if 'XLSX' in str(fmt).upper() else '.md'
+
+        filename = format_filename(doc_title) + ext
         file_path = os.path.join(target_dir, filename)
 
         # 跳过逻辑
@@ -185,9 +195,9 @@ class Scheduler:
                     return
 
         if answer.progress_callback:
-            answer.progress_callback(f"正在下载 ({index}/{total}): {doc_title}")
+            answer.progress_callback(f"正在准备: {doc_title}")
 
-        Log.info(f"下载文档 ({index}/{total}): {doc_title}")
+        Log.info(f"开始文档 ({index}/{total}): {doc_title}")
 
         success = await self._download_doc(namespace, doc, book_dir, answer, level_map)
         
@@ -195,6 +205,12 @@ class Scheduler:
             answer.downloaded_count.increment()
         else:
             answer.failed_count.increment()
+            
+        current_completed = answer.downloaded_count.get() + answer.failed_count.get() + answer.skipped_count.get()
+        if answer.progress_callback:
+            answer.progress_callback(f"正在下载 ({current_completed}/{total}): {doc_title}")
+            
+        Log.info(f"下载文档 ({current_completed}/{total}): {doc_title}")
         
 
     @ErrorHandler.async_error_handler("下载文档IO", reraise=True)
@@ -228,10 +244,42 @@ class Scheduler:
                 target_dir = os.path.join(book_dir, *path_parts)
                 ensure_dir_exists(target_dir)
 
-        filename = format_filename(doc_title) + '.md'
+        doc_type = doc.get('type', '').upper()
+        ext = '.md'
+        if doc_type == 'BOARD':
+            ext = '.png'
+        elif doc_type in ['SHEET', 'TABLE']:
+            fmt = getattr(answer, 'sheet_format' if doc_type == 'SHEET' else 'table_format', 'XLSX (Excel)')
+            ext = '.xlsx' if 'XLSX' in str(fmt).upper() else '.md'
+
+        filename = format_filename(doc_title) + ext
         file_path = os.path.join(target_dir, filename)
 
-        # 下载文档
+        if doc_type == 'BOARD':
+            full_url = doc.get('url', '')
+            if not full_url.startswith('http'):
+                full_url = f"https://www.yuque.com/{namespace}/{doc_url}"
+            Log.info(f"正在导出 Board: {full_url}")
+            success = await self.client.export_board_png(full_url, file_path)
+            if success:
+                answer.downloaded_files.append(file_path)
+                Log.success(f"保存成功: {os.path.relpath(file_path, book_dir)}")
+            return success
+
+        elif doc_type in ['SHEET', 'TABLE'] and ext == '.xlsx':
+            doc_id = str(doc.get('id', ''))
+            if not doc_id:
+                Log.error(f"导出 Excel 失败,缺少 doc_id: {doc_title}")
+                return False
+            Log.info(f"正在导出 Excel (id: {doc_id}): {doc_title}")
+            is_table = (doc_type == 'TABLE')
+            success = await self.client.export_excel(doc_id, file_path, is_table=is_table)
+            if success:
+                answer.downloaded_files.append(file_path)
+                Log.success(f"保存成功: {os.path.relpath(file_path, book_dir)}")
+            return success
+
+        # 下载文档 Markdown
         markdown_content = await self.client.export_markdown(namespace, doc_url, answer.line_break)
         if markdown_content is None:
             Log.warn(f"无法获取内容: {doc_title}")

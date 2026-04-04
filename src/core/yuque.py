@@ -435,6 +435,232 @@ class YuqueClient:
             raise NetworkError(f"导出Markdown异常: {str(e)}")
 
 
+
+    async def export_excel(self, doc_id: str, file_path: str, cookies_str: str = "", is_table: bool = False) -> bool:
+        """导出 Excel"""
+        import asyncio
+        import re
+        import urllib.parse
+        
+        base_url = "https://www.yuque.com"
+        export_url = f"{base_url}/api/docs/{doc_id}/export"
+        
+        cookies_dict = {}
+        if cookies_str:
+            for item in cookies_str.split('; '):
+                if '=' in item:
+                    name, value = item.split('=', 1)
+                    cookies_dict[name] = value
+        
+        yuque_ctoken = ""
+        loc_cookies = ""
+        if cookies_dict:
+            yuque_ctoken = cookies_dict.get("yuque_ctoken", "")
+        else:
+            from ..libs.tools import get_local_cookies
+            loc_cookies = get_local_cookies()
+            if loc_cookies:
+                for item in loc_cookies.split('; '):
+                    if '=' in item:
+                        name, value = item.split('=', 1)
+                        if name == "yuque_ctoken":
+                            yuque_ctoken = value
+        
+        yuque_headers = {
+            "Connection": "keep-alive",
+            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Origin": base_url,
+            "Referer": "https://www.yuque.com/dashboard",
+            "X-CSRF-Token": yuque_ctoken
+        }
+        
+        if cookies_str:
+            yuque_headers["Cookie"] = cookies_str
+        elif loc_cookies:
+            yuque_headers["Cookie"] = loc_cookies
+        
+        payload = {"type": "excel", "force": 0}
+        
+        session = await self._get_session()
+        download_url_path = ""
+        
+        while True:
+            try:
+                req_kwargs = {"json": payload, "headers": yuque_headers}
+                if cookies_dict:
+                     req_kwargs["cookies"] = cookies_dict
+                     
+                async with session.post(export_url, **req_kwargs) as response:
+                    response.raise_for_status()
+                    res_data = await response.json()
+                    state = res_data.get("data", {}).get("state")
+                    
+                    if state == "pending":
+                        await asyncio.sleep(3)
+                    elif state == "success":
+                        download_url_path = res_data.get("data", {}).get("url")
+                        break
+                    else:
+                        Log.error(f"Excel 导出未知状态: {res_data}")
+                        return False
+            except Exception as e:
+                Log.error(f"Excel 导出请求错误: {e}")
+                return False
+
+        if download_url_path:
+            full_download_url = base_url + download_url_path
+            oss_direct_url = ""
+            
+            try:
+                req_kwargs = {"allow_redirects": False, "headers": yuque_headers}
+                if cookies_dict:
+                    req_kwargs["cookies"] = cookies_dict
+                async with session.get(full_download_url, **req_kwargs) as yuque_dl_resp:
+                    if yuque_dl_resp.status in (301, 302):
+                        oss_direct_url = yuque_dl_resp.headers.get("Location")
+                    else:
+                        Log.error(f"预期返回 302 跳转，但返回了 {yuque_dl_resp.status}")
+                        return False
+            except Exception as e:
+                Log.error(f"获取 OSS 链接失败: {e}")
+                return False
+
+        if oss_direct_url:
+            clean_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+                "Referer": "https://www.yuque.com/"
+            }
+            
+            try:
+                async with aiohttp.request("GET", oss_direct_url, headers=clean_headers) as dl_response:
+                    dl_response.raise_for_status()
+                    
+                    with open(file_path, 'wb') as f:
+                        async for chunk in dl_response.content.iter_chunked(8192):
+                            if chunk:
+                                f.write(chunk)
+                return True
+            except Exception as e:
+                Log.error(f"写入 Excel 文件错误: {e}")
+                return False
+        return False
+
+    async def export_board_png(self, url: str, file_path: str, cookies_str: str = "") -> bool:
+        """使用 Playwright 导出 Board 画板为图片"""
+        import asyncio
+        import os
+        from playwright.async_api import async_playwright
+        
+        parsed_cookies = []
+        if cookies_str:
+            for item in cookies_str.split('; '):
+                if '=' in item:
+                    name, value = item.split('=', 1)
+                    parsed_cookies.append({
+                        "name": name, "value": value, "domain": ".yuque.com", "path": "/"
+                    })
+        else:
+            from ..libs.tools import get_local_cookies
+            loc_cookies = get_local_cookies()
+            if loc_cookies:
+                 for item in loc_cookies.split('; '):
+                    if '=' in item:
+                        name, value = item.split('=', 1)
+                        parsed_cookies.append({
+                            "name": name, "value": value, "domain": ".yuque.com", "path": "/"
+                        })
+
+        async def intercept_assets(route):
+            excluded_types = ["image", "media", "font", "tracking", "websocket"]
+            if route.request.resource_type in excluded_types:
+                await route.abort()
+            else:
+                await route.continue_()
+
+        try:
+            async with async_playwright() as p:
+                browser_channel = None
+                for ch in ["msedge", "chrome"]:
+                    try:
+                        temp_b = await p.chromium.launch(channel=ch)
+                        await temp_b.close()
+                        browser_channel = ch
+                        break
+                    except: continue
+
+                browser = await p.chromium.launch(headless=True, channel=browser_channel)
+                context = await browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    device_scale_factor=1
+                )
+                if parsed_cookies:
+                    await context.add_cookies(parsed_cookies)
+
+                page = await context.new_page()
+                
+                try:
+                    await page.goto(url, wait_until="networkidle", timeout=60000)
+                    
+                    svg_selector = ".lake-diagram-viewport-container svg"
+                    await page.wait_for_selector(svg_selector, state="visible", timeout=40000)
+
+                    rect = await page.evaluate('''
+                        () => {
+                            const svg = document.querySelector('.lake-diagram-viewport-container svg');
+                            const rootGroup = document.querySelector('g[data-element="root_group"]');
+                            if (!svg || !rootGroup) return null;
+
+                            const bbox = rootGroup.getBBox();
+                            const pad = 20; 
+                            
+                            const rect = {
+                                x: bbox.x - pad,
+                                y: bbox.y - pad,
+                                w: Math.ceil(bbox.width + pad * 2),
+                                h: Math.ceil(bbox.height + pad * 2)
+                            };
+
+                            document.body.innerHTML = '';
+                            document.body.style.margin = '0';
+                            document.body.style.padding = '0';
+                            document.body.style.background = '#ffffff';
+                            
+                            svg.id = 'my-unique-export-target';
+                            
+                            svg.setAttribute('viewBox', `${rect.x} ${rect.y} ${rect.w} ${rect.h}`);
+                            svg.style.width = `${rect.w}px`;
+                            svg.style.height = `${rect.h}px`;
+                            svg.style.display = 'block';
+                            
+                            document.body.appendChild(svg);
+                            
+                            return rect;
+                        }
+                    ''')
+
+                    if not rect or rect['w'] <= 0 or rect['h'] <= 0:
+                        return False
+
+                    await page.set_viewport_size({"width": int(rect['w']), "height": int(rect['h'])})
+                    await asyncio.sleep(0.5)
+
+                    await page.locator("#my-unique-export-target").screenshot(path=file_path, animations="disabled")
+                    return True
+
+                except Exception as e:
+                    Log.error(f"截图出错: {e}")
+                    return False
+                finally:
+                    await page.close()
+                    await browser.close()
+        except Exception as e:
+            Log.error(f"Playwright 启动失败: {e}")
+            return False
+        return False
+
 # 全局默认客户端
 default_client = YuqueClient()
 
@@ -482,3 +708,13 @@ class YuqueApi:
              return YuqueParser.parse_book_toc(text_content)
         except:
              return None
+
+    @staticmethod
+    async def export_excel(doc_id: str, output_path: str, cookies_str: str = "", is_table: bool = False) -> bool:
+        """导出 Excel"""
+        return await default_client.export_excel(doc_id, output_path, cookies_str, is_table)
+
+    @staticmethod
+    async def export_board_png(url: str, output_path: str, cookies_str: str = "") -> bool:
+        """导出 Board 画板为图片"""
+        return await default_client.export_board_png(url, output_path, cookies_str)

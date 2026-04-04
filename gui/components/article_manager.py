@@ -413,10 +413,10 @@ class ArticleSelectionDialog(QDialog):
                         tree_item.setIcon(0, get_article_icon(item_type, item))
                         
                         # 设置样式
-                        font = QFont()
                         if item_type == 'TITLE':
+                            font = tree_item.font(0)
                             font.setBold(True)
-                        tree_item.setFont(0, font)
+                            tree_item.setFont(0, font)
                         
                         # 存储文章ID和其他必要信息
                         tree_item.setData(0, Qt.ItemDataRole.UserRole, item.get('id', ''))
@@ -454,10 +454,10 @@ class ArticleSelectionDialog(QDialog):
                         tree_item = QTreeWidgetItem(self.article_list, [display_title])
                         tree_item.setIcon(0, get_article_icon(item_type, article))
                         
-                        font = QFont()
                         if item_type == 'TITLE':
+                            font = tree_item.font(0)
                             font.setBold(True)
-                        tree_item.setFont(0, font)
+                            tree_item.setFont(0, font)
                         
                         tree_item.setData(0, Qt.ItemDataRole.UserRole, article_id)
                         tree_item.setData(0, Qt.ItemDataRole.UserRole + 1, article)
@@ -886,10 +886,10 @@ class ArticleManagerMixin:
                         tree_item = QTreeWidgetItem(self.article_list, [display_title])
                         tree_item.setIcon(0, get_article_icon(item_type, article))
                         
-                        font = QFont()
                         if item_type == 'TITLE':
+                            font = tree_item.font(0)
                             font.setBold(True)
-                        tree_item.setFont(0, font)
+                            tree_item.setFont(0, font)
                         
                         if isinstance(article, dict):
                             tree_item.setData(0, Qt.ItemDataRole.UserRole, article.get('id', ''))

@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QCheckBox, QListWidget, QGroupBox, 
-    QLineEdit, QProgressBar, QTabWidget, QSplitter, QSizePolicy, QAbstractItemView
+    QLineEdit, QProgressBar, QTabWidget, QSplitter, QSizePolicy, QAbstractItemView, QComboBox, QGridLayout
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
@@ -366,28 +366,90 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         options_layout.setSpacing(4)  
         options_group.setLayout(options_layout)
 
-        # 创建常规复选框样式的选项
+        # 将复选框在一行内显示
+        checkbox_layout = QHBoxLayout()
+        checkbox_layout.setSpacing(10)
+        
         self.skip_local_checkbox = QCheckBox("跳过本地文件")
         self.skip_local_checkbox.setToolTip("如果文件已经存在则不重新下载")
         self.skip_local_checkbox.setChecked(True)
-        self.skip_local_checkbox.setStyleSheet("font-size: 12px; padding: 3px 0; margin: 0;")
-        options_layout.addWidget(self.skip_local_checkbox)
+        self.skip_local_checkbox.setStyleSheet(" padding: 2px 0;")
+        checkbox_layout.addWidget(self.skip_local_checkbox)
 
         self.keep_linebreak_checkbox = QCheckBox("保留语雀换行标识")
         self.keep_linebreak_checkbox.setToolTip("保留语雀文档中的换行标记")
         self.keep_linebreak_checkbox.setChecked(True)
-        self.keep_linebreak_checkbox.setStyleSheet("font-size: 12px; padding: 3px 0; margin: 0;")
-        options_layout.addWidget(self.keep_linebreak_checkbox)
+        self.keep_linebreak_checkbox.setStyleSheet(" padding: 2px 0;")
+        checkbox_layout.addWidget(self.keep_linebreak_checkbox)
 
         self.download_images_checkbox = QCheckBox("下载图片到本地")
         self.download_images_checkbox.setToolTip("将Markdown文档中的图片下载到本地，并更新图片链接")
         self.download_images_checkbox.setChecked(True)
-        self.download_images_checkbox.setStyleSheet("font-size: 12px; padding: 3px 0; margin: 0 0 2px 0;")  
-        options_layout.addWidget(self.download_images_checkbox)
+        self.download_images_checkbox.setStyleSheet(" padding: 2px 0;")  
+        checkbox_layout.addWidget(self.download_images_checkbox)
+        
+        checkbox_layout.addStretch(1)
+        options_layout.addLayout(checkbox_layout)
+
+        # 添加导出格式下拉选项
+        format_group = QWidget()
+        format_layout = QVBoxLayout(format_group)
+        format_layout.setContentsMargins(0, 5, 0, 5)
+        format_layout.setSpacing(6)
+        
+        # 文档导出格式
+        doc_format_layout = QHBoxLayout()
+        doc_format_label = QLabel("文档导出格式:")
+        self.doc_format_combo = QComboBox()
+        self.doc_format_combo.setFixedWidth(140)
+        self.doc_format_combo.setStyleSheet(" padding: 2px;")
+        self.doc_format_combo.addItem(" Markdown ", "md")
+        doc_format_layout.addWidget(doc_format_label)
+        doc_format_layout.addWidget(self.doc_format_combo)
+        doc_format_layout.addStretch(1)
+        format_layout.addLayout(doc_format_layout)
+        
+        # 画板导出格式
+        board_format_layout = QHBoxLayout()
+        board_format_label = QLabel("画板导出格式:")
+        self.board_format_combo = QComboBox()
+        self.board_format_combo.setFixedWidth(140)
+        self.board_format_combo.setStyleSheet(" padding: 2px;")
+        self.board_format_combo.addItem(" PNG图片 ", "png")
+        board_format_layout.addWidget(board_format_label)
+        board_format_layout.addWidget(self.board_format_combo)
+        board_format_layout.addStretch(1)
+        format_layout.addLayout(board_format_layout)
+        
+        # 表格导出格式
+        sheet_format_layout = QHBoxLayout()
+        sheet_format_label = QLabel("表格导出格式:")
+        self.sheet_format_combo = QComboBox()
+        self.sheet_format_combo.setFixedWidth(140)
+        self.sheet_format_combo.setStyleSheet(" padding: 2px;")
+        self.sheet_format_combo.addItem(" Excel ", "xlsx")
+        sheet_format_layout.addWidget(sheet_format_label)
+        sheet_format_layout.addWidget(self.sheet_format_combo)
+        sheet_format_layout.addStretch(1)
+        format_layout.addLayout(sheet_format_layout)
+        
+        # 数据表导出格式
+        table_format_layout = QHBoxLayout()
+        table_format_label = QLabel("数据表导出格式:")
+        self.table_format_combo = QComboBox()
+        self.table_format_combo.setFixedWidth(140)
+        self.table_format_combo.setStyleSheet(" padding: 2px;")
+        self.table_format_combo.addItem(" Excel ", "xlsx")
+        table_format_layout.addWidget(table_format_label)
+        table_format_layout.addWidget(self.table_format_combo)
+        table_format_layout.addStretch(1)
+        format_layout.addLayout(table_format_layout)
+        
+        options_layout.addWidget(format_group)
 
         # 输出目录设置
         output_label = QLabel("输出目录:")
-        output_label.setStyleSheet("font-weight: bold; font-size: 12px; margin: 0 0 2px 0;")  
+        output_label.setStyleSheet("font-weight: bold;  margin: 0 0 2px 0;")  
         options_layout.addWidget(output_label)
         
         self.output_input = QLineEdit()

@@ -1,7 +1,7 @@
 from qasync import asyncSlot
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
-    QCheckBox, QGroupBox, QMessageBox, QAbstractItemView, QFileDialog, QTreeWidgetItem, QTreeWidgetItemIterator
+    QCheckBox, QGroupBox, QMessageBox, QAbstractItemView, QFileDialog, QTreeWidgetItem, QTreeWidgetItemIterator, QComboBox, QGridLayout
 )
 from PyQt6.QtCore import Qt
 
@@ -132,18 +132,59 @@ class CustomUrlManagerMixin:
         output_group.addLayout(output_input_layout)
         right_layout.addLayout(output_group)
         
-        # 选项开关
+        # 将选项开关在一行内显示
+        checkbox_layout = QHBoxLayout()
+        checkbox_layout.setSpacing(10)
+        
         self.custom_skip_local_checkbox = QCheckBox("跳过已存在的文件")
         self.custom_skip_local_checkbox.setChecked(True)
-        right_layout.addWidget(self.custom_skip_local_checkbox)
+        self.custom_skip_local_checkbox.setStyleSheet(" padding: 2px 0;")
+        checkbox_layout.addWidget(self.custom_skip_local_checkbox)
 
         self.custom_keep_linebreak_checkbox = QCheckBox("保留语雀换行标识")
         self.custom_keep_linebreak_checkbox.setChecked(True)
-        right_layout.addWidget(self.custom_keep_linebreak_checkbox)
+        self.custom_keep_linebreak_checkbox.setStyleSheet(" padding: 2px 0;")
+        checkbox_layout.addWidget(self.custom_keep_linebreak_checkbox)
 
         self.custom_download_images_checkbox = QCheckBox("下载图片到本地")
         self.custom_download_images_checkbox.setChecked(True)
-        right_layout.addWidget(self.custom_download_images_checkbox)
+        self.custom_download_images_checkbox.setStyleSheet(" padding: 2px 0;")
+        checkbox_layout.addWidget(self.custom_download_images_checkbox)
+        
+        checkbox_layout.addStretch(1)
+        right_layout.addLayout(checkbox_layout)
+        
+        # 添加导出格式下拉选项
+        format_group = QWidget()
+        format_layout = QVBoxLayout(format_group)
+        format_layout.setContentsMargins(0, 5, 0, 5)
+        format_layout.setSpacing(6)
+        
+        # 文档导出格式
+        doc_format_layout = QHBoxLayout()
+        doc_format_label = QLabel("文档导出格式:")
+        self.custom_doc_format_combo = QComboBox()
+        self.custom_doc_format_combo.setFixedWidth(140)
+        self.custom_doc_format_combo.setStyleSheet(" padding: 2px;")
+        self.custom_doc_format_combo.addItem(" Markdown ", "md")
+        doc_format_layout.addWidget(doc_format_label)
+        doc_format_layout.addWidget(self.custom_doc_format_combo)
+        doc_format_layout.addStretch(1)
+        format_layout.addLayout(doc_format_layout)
+        
+        # 画板导出格式
+        board_format_layout = QHBoxLayout()
+        board_format_label = QLabel("画板导出格式:")
+        self.custom_board_format_combo = QComboBox()
+        self.custom_board_format_combo.setFixedWidth(140)
+        self.custom_board_format_combo.setStyleSheet(" padding: 2px;")
+        self.custom_board_format_combo.addItem(" PNG图片 ", "png")
+        board_format_layout.addWidget(board_format_label)
+        board_format_layout.addWidget(self.custom_board_format_combo)
+        board_format_layout.addStretch(1)
+        format_layout.addLayout(board_format_layout)
+        
+        right_layout.addWidget(format_group)
         
         right_layout.addStretch(1)
         
@@ -273,7 +314,9 @@ class CustomUrlManagerMixin:
         options = {
             "skip": self.custom_skip_local_checkbox.isChecked(),
             "linebreak": self.custom_keep_linebreak_checkbox.isChecked(),
-            "download_images": self.custom_download_images_checkbox.isChecked()
+            "download_images": self.custom_download_images_checkbox.isChecked(),
+            "doc_format": self.custom_doc_format_combo.currentData(),
+            "board_format": self.custom_board_format_combo.currentData()
         }
         
         await self.custom_url_controller.download_docs(docs, output_dir, options)
@@ -307,7 +350,7 @@ class CustomUrlManagerMixin:
         skipped = self.custom_url_controller._skipped_count
         failed = self.custom_url_controller._failed_count
         
-        msg = f"导出完成!\n成功下载: {downloaded}\n跳过文件: {skipped}\n失败文件: {failed}"
+        msg = f"导出完成!\n成功下载: {downloaded}\n跳过文件: {skipped}\n失败文件: {failed}" + "\u00A0" * 25
         QMessageBox.information(self, "导出完成", msg)
 
     def filter_custom_articles(self, text):
@@ -397,10 +440,10 @@ class CustomUrlManagerMixin:
                     tree_item.setIcon(0, get_article_icon(item_type, item))
                     
                     # 设置样式
-                    font = QFont()
                     if item_type == 'TITLE':
+                        font = tree_item.font(0)
                         font.setBold(True)
-                    tree_item.setFont(0, font)
+                        tree_item.setFont(0, font)
                     
                     # 存储完整的文档数据
                     tree_item.setData(0, Qt.ItemDataRole.UserRole, item)
