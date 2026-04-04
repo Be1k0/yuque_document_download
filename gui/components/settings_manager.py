@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QApplication, QTextBrowser, QSizePolicy, QProgressDialog, QProgressBar
 )
 from PyQt6.QtGui import QFont, QPixmap, QIntValidator
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from qasync import asyncSlot
 from src.libs.log import Log
 from utils import static_resource_path, create_circular_pixmap
@@ -560,6 +560,10 @@ class SettingsManagerMixin:
         """触发启动后的自动更新检查"""
         if getattr(self, "_startup_update_check_triggered", False):
             return
+        if getattr(self, "_login_action_running", False):
+            Log.debug("登录流程进行中，已延后启动自动检查更新")
+            QTimer.singleShot(1500, self.trigger_startup_update_check)
+            return
         self._startup_update_check_triggered = True
         self._startup_update_check_task = self.auto_check_update_on_startup()
 
@@ -619,6 +623,12 @@ class SettingsManagerMixin:
     async def auto_check_update_on_startup(self):
         """程序启动后自动检查更新"""
         from main import __version__
+
+        if getattr(self, "_login_action_running", False):
+            Log.debug("登录流程尚未结束，已重新排队自动检查更新")
+            self._startup_update_check_triggered = False
+            QTimer.singleShot(1500, self.trigger_startup_update_check)
+            return
 
         if self._is_update_check_running():
             return

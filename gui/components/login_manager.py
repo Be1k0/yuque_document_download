@@ -4,7 +4,7 @@ import shutil
 from qasync import asyncSlot
 from PyQt6.QtWidgets import QMessageBox, QTabWidget
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal, QTimer
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from src.libs.log import Log
 from utils import resource_path, create_circular_pixmap
@@ -16,6 +16,33 @@ class LoginManagerMixin:
     """
     web_login_finished = pyqtSignal()
     web_login_error = pyqtSignal(str)
+
+    def _set_login_action_running(self, is_running: bool):
+        """设置登录流程运行状态"""
+        self._login_action_running = is_running
+
+    def _show_async_message_box(self, icon, title: str, message: str):
+        """异步显示消息框，避免阻塞事件循环"""
+        def _open_message_box():
+            box = QMessageBox(self)
+            box.setIcon(icon)
+            box.setWindowTitle(title)
+            box.setText(message)
+            box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            active_boxes = getattr(self, "_active_message_boxes", [])
+            active_boxes.append(box)
+            self._active_message_boxes = active_boxes
+            box.finished.connect(lambda _: self._remove_message_box(box))
+            box.open()
+
+        QTimer.singleShot(0, _open_message_box)
+
+    def _remove_message_box(self, box):
+        """移除已关闭的消息框引用"""
+        active_boxes = getattr(self, "_active_message_boxes", [])
+        if box in active_boxes:
+            active_boxes.remove(box)
+        self._active_message_boxes = active_boxes
 
     @property
     def login_controller(self):
@@ -37,12 +64,12 @@ class LoginManagerMixin:
         if hasattr(self, 'web_login_button'):
             self.web_login_button.setEnabled(True)
             self.web_login_button.setText("网页端登录")
-            
-        QMessageBox.critical(self, "登录错误", message)
+
+        self._show_async_message_box(QMessageBox.Icon.Critical, "登录错误", message)
 
     def on_login_expired(self, message):
         """处理登录过期"""
-        QMessageBox.warning(self, "登录已过期", message)
+        self._show_async_message_box(QMessageBox.Icon.Warning, "登录已过期", message)
         self.logout(force=True)
 
     @asyncSlot()
@@ -73,9 +100,13 @@ class LoginManagerMixin:
         self.login_button.setEnabled(False)
         self.login_button.setText("登录中...")
 
-        # 使用 controller 执行登录
-        result = await self.login_controller.login(username, password)
-        
+        self._set_login_action_running(True)
+        try:
+            # 使用 controller 执行登录
+            result = await self.login_controller.login(username, password)
+        finally:
+            self._set_login_action_running(False)
+
         # 处理结果
         self.on_login_finished(result)
 
@@ -85,16 +116,23 @@ class LoginManagerMixin:
         # 禁用网页登录按钮并显示状态
         self.web_login_button.setEnabled(False)
         self.web_login_button.setText("正在打开浏览器...")
-        result = await self.login_controller.web_login()
+        self._set_login_action_running(True)
+        try:
+            result = await self.login_controller.web_login()
+        finally:
+            self._set_login_action_running(False)
         
         if result:
             self.on_web_login_finished()
+        else:
+            error_message = getattr(self.login_controller, "last_web_login_error", "") or "网页登录失败，请重试。"
+            self.on_web_login_error(error_message)
 
     def on_web_login_finished(self):
         """网页登录完成后的回调"""
         self.web_login_button.setEnabled(True)
         self.web_login_button.setText("网页端登录")
-        QMessageBox.information(self, "登录成功", "成功登录到语雀账号")
+        self._show_async_message_box(QMessageBox.Icon.Information, "登录成功", "成功登录到语雀账号")
 
         # 显示用户信息，隐藏登录表单
         self.show_user_info()
@@ -113,7 +151,7 @@ class LoginManagerMixin:
         """
         self.web_login_button.setEnabled(True)
         self.web_login_button.setText("网页端登录")
-        QMessageBox.critical(self, "登录错误", f"网页登录出错: {error_msg}")
+        self._show_async_message_box(QMessageBox.Icon.Critical, "登录错误", f"网页登录出错: {error_msg}")
 
     def on_login_finished(self, result):
         """登录完成后的回调
@@ -125,14 +163,14 @@ class LoginManagerMixin:
         self.login_button.setText("登录")
 
         if result:
-            QMessageBox.information(self, "登录成功", "成功登录到语雀账号")
+            self._show_async_message_box(QMessageBox.Icon.Information, "登录成功", "成功登录到语雀账号")
             self.show_user_info()
             tabs = self.findChild(QTabWidget)
             if tabs:
                 tabs.setCurrentIndex(1)
             self.load_books()
         else:
-            QMessageBox.warning(self, "登录失败", "登录失败，请检查用户名和密码")
+            self._show_async_message_box(QMessageBox.Icon.Warning, "登录失败", "登录失败，请检查用户名和密码")
 
     def on_login_error(self, error_msg):
         """登录出错的回调
@@ -142,7 +180,7 @@ class LoginManagerMixin:
         """
         self.login_button.setEnabled(True)
         self.login_button.setText("登录")
-        QMessageBox.critical(self, "登录错误", f"登录过程出错: {error_msg}")
+        self._show_async_message_box(QMessageBox.Icon.Critical, "登录错误", f"登录过程出错: {error_msg}")
 
     def show_login_form(self):
         """显示登录表单，隐藏用户信息"""

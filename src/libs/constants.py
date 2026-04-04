@@ -69,6 +69,18 @@ class GlobalConfig:
     enable_update_proxy: bool = True  # 是否启用程序更新下载加速
     update_proxy_base_url: str = "https://gh-proxy.org/"  # 程序更新下载加速地址
     update_temp_dir: str = get_resource_path(".meta/updater")  # 更新临时目录
+    web_login_timeout_ms: int = 300000  # 网页端登录超时时间
+    web_login_poll_interval_ms: int = 1000  # 网页端登录轮询间隔
+    web_login_profile_dir: str = get_resource_path(".meta/browser_profiles")  # 网页端登录临时浏览器目录
+    web_login_success_cookie_names: tuple[str, ...] = ("_yuque_session", "yuque_ctoken")  # 登录成功关键Cookie
+    yuque_request_cookie_names: tuple[str, ...] = (
+        "aliyungf_tc",
+        "acw_tc",
+        "yuque_ctoken",
+        "receive-cookie-deprecation",
+        "lang",
+        "_yuque_session",
+    )  # 请求语雀接口时允许携带的Cookie
 
 
 @dataclass

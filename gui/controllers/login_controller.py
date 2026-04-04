@@ -1,5 +1,6 @@
 from PyQt6.QtCore import pyqtSignal
 from src.core.yuque import YuqueClient
+from src.core.web_login import SystemBrowserLoginBridge
 from src.libs.log import Log
 from src.libs.exceptions import CookiesExpiredError
 from gui.controllers.base_controller import BaseController
@@ -21,6 +22,7 @@ class LoginController(BaseController):
     def __init__(self, client: YuqueClient = None):
         super().__init__()
         self.client = client or YuqueClient()
+        self.last_web_login_error = ""
         
     async def login(self, username: str, password: str) -> bool:
         """执行登录操作
@@ -153,96 +155,42 @@ class LoginController(BaseController):
         Returns:
             bool: 登录是否成功
         """
-        import os
         import time
         from src.libs.tools import save_cookies
         
+        self.last_web_login_error = ""
         try:
-            from playwright.async_api import async_playwright
-            
-            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
-            
-            # 尝试使用系统中安装的浏览器进行登录
-            async with async_playwright() as p:
-                browser_channels = ["msedge", "chrome", "360chrome", "qqbrowser", "brave", None]
-                browser = None
-                for channel in browser_channels:
-                    try:
-                        if channel:
-                            self.log_info(f"启动系统中的 {channel}...")
-                            browser = await p.chromium.launch(headless=False, channel=channel)
-                        if browser:
-                            break
-                    except Exception:
-                        continue
-                
-                if not browser:
-                    try: 
-                        browser = await p.chromium.launch(headless=False)
-                    except:
-                        pass
-                
-                if not browser:
-                    self.login_failed.emit("未检测到适配的浏览器，请先安装Edge或谷歌浏览器后再运行。")
-                    return False
-                
-                try:
-                    context = await browser.new_context()
-                    page = await context.new_page()
-                    await page.goto("https://www.yuque.com/login")
-                    
-                    self.log_info("等待用户登录...")
-                    
-                    # 等待登录成功跳转
-                    await page.wait_for_url(lambda url: "login" not in url and "yuque.com" in url, timeout=300000)
-                    
-                    self.log_info("检测到登录成功！正在提取数据...")
-                    await page.wait_for_load_state('networkidle')
-                    cookies = await context.cookies()
-                    
-                except Exception as e:
-                    self.log_error("登录失败或超时", e)
-                    self.login_failed.emit("登录失败或超时，请重试。")
-                    if browser:
-                        await browser.close()
-                    return False
-                
-                if not cookies:
-                    self.login_failed.emit("错误：未提取到任何 Cookie。")
-                    if browser:
-                        await browser.close()
-                    return False
-                
-                # 处理Cookie
-                cookie_list = []
-                for cookie in cookies:
-                    cookie_list.append(f"{cookie['name']}={cookie['value']}")
-                
-                # 强制设置过期时间为当前时间 + 一周
-                current_time_ms = int(time.time() * 1000)
-                expire_time_ms = current_time_ms + (7 * 24 * 60 * 60 * 1000)
-                self.log_info(f"设置 Cookie 过期时间为一周后（{expire_time_ms}）")
-                
-                # 保存 Cookie
-                cookie_string = "; ".join(cookie_list)
-                save_cookies(cookie_string, expire_time_ms)
-                
-                await browser.close()
-                
-                self.log_info("正在获取用户信息...")
-                success = await self.client.get_user_info()
-                
-                if not success:
-                    self.login_failed.emit("获取用户信息失败，请重试。")
-                    return False
-                
-                return await self.check_login_status()
+            bridge = SystemBrowserLoginBridge()
+            self.log_info("正在打开系统浏览器，请在浏览器中完成登录...")
+            result = await bridge.login()
+
+            if not result.cookie_string:
+                self.last_web_login_error = "未提取到有效 Cookie，请重新完成网页登录。"
+                return False
+
+            current_time_ms = int(time.time() * 1000)
+            expire_time_ms = current_time_ms + (7 * 24 * 60 * 60 * 1000)
+            Log.debug(f"网页登录浏览器: {result.browser_name}")
+            Log.debug(f"网页登录完成，最终页面: {result.final_url}")
+            Log.debug(f"提取到的关键 Cookie: {', '.join(result.cookie_names) or '无'}")
+            Log.debug(f"设置 Cookie 过期时间为一周后（{expire_time_ms}）")
+
+            save_success = save_cookies(result.cookie_string, expire_time_ms)
+            if not save_success:
+                self.last_web_login_error = "保存网页登录 Cookie 失败，请检查 .meta 目录权限。"
+                return False
+
+            Log.debug("正在校验网页登录后的用户信息...")
+            if not await self.client.get_user_info():
+                self.last_web_login_error = "获取用户信息失败，请重试。"
+                return False
+
+            return await self.check_login_status()
 
         except ImportError:
-            self.login_failed.emit("未安装playwright库，请先运行: pip install playwright")
+            self.last_web_login_error = "未安装playwright库，请先运行: pip install playwright"
             return False
         except Exception as e:
             self.log_error("网页登录出错", e)
-            self.login_failed.emit(f"网页登录出错: {str(e)}")
+            self.last_web_login_error = str(e)
             return False
-

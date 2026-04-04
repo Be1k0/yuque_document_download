@@ -78,6 +78,7 @@ class CustomUrlController(BaseController):
             
             # 设置浏览器路径
             os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+            os.environ.setdefault("NODE_NO_WARNINGS", "1")
             
             self.playwright = await async_playwright().start()
             

@@ -15,6 +15,35 @@ def gen_timestamp() -> int:
     return int(time.time() * 1000)
 
 
+def sanitize_cookie_string(cookie_string: str) -> str:
+    """过滤并规范化语雀请求需要的 Cookie 字符串"""
+    if not cookie_string:
+        return ""
+
+    allowed_names = set(GLOBAL_CONFIG.yuque_request_cookie_names)
+    cookie_map: dict[str, str] = {}
+
+    for raw_item in cookie_string.split(";"):
+        item = raw_item.strip()
+        if not item or "=" not in item:
+            continue
+
+        name, value = item.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if not name or name not in allowed_names:
+            continue
+
+        cookie_map[name] = value
+
+    ordered_cookie_items = [
+        f"{name}={cookie_map[name]}"
+        for name in GLOBAL_CONFIG.yuque_request_cookie_names
+        if name in cookie_map
+    ]
+    return "; ".join(ordered_cookie_items)
+
+
 def get_local_cookies() -> str:
     """获取本地有效cookies，如果cookies过期就返回空字符串"""
     f = File()
@@ -27,7 +56,10 @@ def get_local_cookies() -> str:
             if cookie_info.expire_time < gen_timestamp():
                 return ""
             else:
-                return cookie_info.cookies
+                sanitized_cookies = sanitize_cookie_string(cookie_info.cookies)
+                if sanitized_cookies and sanitized_cookies != cookie_info.cookies:
+                    save_cookies(sanitized_cookies, cookie_info.expire_time)
+                return sanitized_cookies
         else:
             return ""
     except Exception:
@@ -129,6 +161,8 @@ def save_cookies(cookies: str, expire_time: Optional[int] = None) -> bool:
         f = File()
         if expire_time is None:
             expire_time = gen_timestamp() + GLOBAL_CONFIG.local_expire
+
+        cookies = sanitize_cookie_string(cookies)
 
         cookie_info = LocalCookiesInfo(
             expire_time=expire_time,
