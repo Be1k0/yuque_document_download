@@ -41,12 +41,18 @@ class ExportManagerMixin:
             selected_namespaces = [
                 item.data(Qt.ItemDataRole.UserRole) for item in selected_items if item.data(Qt.ItemDataRole.UserRole)
             ]
-            has_selected_articles = (
-                hasattr(self, '_current_answer')
+            selected_articles = {}
+            if (
+                len(selected_namespaces) == 1
+                and hasattr(self, '_current_answer')
                 and hasattr(self._current_answer, 'selected_docs')
-                and bool(self._current_answer.selected_docs)
-                and set(self._current_answer.selected_docs.keys()).issubset(set(selected_namespaces))
-            )
+            ):
+                namespace = selected_namespaces[0]
+                selected_ids = self._current_answer.selected_docs.get(namespace, [])
+                if selected_ids:
+                    selected_articles = {namespace: list(selected_ids)}
+
+            has_selected_articles = bool(selected_articles)
 
             # 创建并配置MutualAnswer对象
             answer = MutualAnswer(
@@ -61,7 +67,7 @@ class ExportManagerMixin:
 
             # 设置知识库列表
             if has_selected_articles:
-                answer.selected_docs = self._current_answer.selected_docs
+                answer.selected_docs = selected_articles
                 answer.toc_range = list(answer.selected_docs.keys())
             else:
                 answer.toc_range = selected_namespaces
