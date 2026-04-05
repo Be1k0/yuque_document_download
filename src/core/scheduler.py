@@ -2,7 +2,7 @@ import asyncio
 import os
 from typing import Dict, Any
 from .yuque import default_client, YuqueClient
-from ..libs.constants import GLOBAL_CONFIG, MutualAnswer
+from ..libs.constants import GLOBAL_CONFIG, MutualAnswer, ThreadSafeCounter
 from ..libs.file import File
 from ..libs.log import Log
 from ..libs.tools import (
@@ -117,10 +117,13 @@ class Scheduler:
 
         # 并发下载
         semaphore = asyncio.Semaphore(self.concurrency)
+        book_completed_count = ThreadSafeCounter()
         
         async def semaphore_download(idx, doc):
             async with semaphore:
-                await self._process_doc_download(idx, len(filtered_docs), doc, namespace, book_dir, answer, level_map)
+                await self._process_doc_download(
+                    idx, len(filtered_docs), doc, namespace, book_dir, answer, level_map, book_completed_count
+                )
 
         tasks = [semaphore_download(i, doc) for i, doc in enumerate(filtered_docs, 1)]
         
@@ -130,7 +133,7 @@ class Scheduler:
         Log.success(f"知识库 {book.name} 下载完成")
 
     @ErrorHandler.async_error_handler("处理文档下载", reraise=False)
-    async def _process_doc_download(self, index, total, doc, namespace, book_dir, answer, level_map):
+    async def _process_doc_download(self, index, total, doc, namespace, book_dir, answer, level_map, book_completed_count):
         """处理单个文档下载逻辑
         
         Args:
@@ -149,14 +152,19 @@ class Scheduler:
         # 检查文档标识符
         if not doc_slug and not doc_url:
             Log.info(f"跳过无标识符条目: {doc_title}")
+            answer.skipped_count.increment()
+            current_completed = book_completed_count.increment()
+            if answer.progress_callback:
+                answer.progress_callback(f"跳过无标识符 ({current_completed}/{total}): {doc_title}")
             return
 
         doc_type = doc.get('type', '')
         valid_types = ['DOC', 'DOCUMENT', 'BOARD', 'SHEET', 'TABLE']
         if doc_type and doc_type.upper() not in valid_types:
             Log.info(f"跳过非文档条目: {doc_title}")
+            current_completed = book_completed_count.increment()
             if answer.progress_callback:
-                answer.progress_callback(f"跳过非文档 ({index}/{total}): {doc_title}")
+                answer.progress_callback(f"跳过非文档 ({current_completed}/{total}): {doc_title}")
             answer.skipped_count.increment()
             return
 
@@ -184,15 +192,21 @@ class Scheduler:
         if answer.skip:
             if os.path.exists(file_path):
                 answer.skipped_count.increment()
+                current_completed = book_completed_count.increment()
                 Log.info(f"跳过已存在: {filename}")
+                if answer.progress_callback:
+                    answer.progress_callback(f"跳过 ({current_completed}/{total}): {doc_title}")
                 return
             
             folder_name = os.path.splitext(filename)[0]
             subdir_file_path = os.path.join(target_dir, folder_name, filename)
             if os.path.exists(subdir_file_path):
-                    answer.skipped_count.increment()
-                    Log.info(f"跳过已存在(子目录): {folder_name}/{filename}")
-                    return
+                answer.skipped_count.increment()
+                current_completed = book_completed_count.increment()
+                Log.info(f"跳过已存在(子目录): {folder_name}/{filename}")
+                if answer.progress_callback:
+                    answer.progress_callback(f"跳过 ({current_completed}/{total}): {doc_title}")
+                return
 
         if answer.progress_callback:
             answer.progress_callback(f"正在准备: {doc_title}")
@@ -203,14 +217,16 @@ class Scheduler:
         
         if success:
             answer.downloaded_count.increment()
+            status_text = "完成"
         else:
             answer.failed_count.increment()
+            status_text = "失败"
             
-        current_completed = answer.downloaded_count.get() + answer.failed_count.get() + answer.skipped_count.get()
+        current_completed = book_completed_count.increment()
         if answer.progress_callback:
-            answer.progress_callback(f"正在下载 ({current_completed}/{total}): {doc_title}")
+            answer.progress_callback(f"{status_text} ({current_completed}/{total}): {doc_title}")
             
-        Log.info(f"下载文档 ({current_completed}/{total}): {doc_title}")
+        Log.info(f"文档处理进度 ({current_completed}/{total}): {doc_title}")
         
 
     @ErrorHandler.async_error_handler("下载文档IO", reraise=True)

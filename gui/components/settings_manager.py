@@ -95,7 +95,7 @@ class SettingsManagerMixin:
         threads_label = QLabel("图片下载线程数:")
         threads_label.setMinimumWidth(100)
         self.threads_input = QLineEdit(str(self.download_threads))
-        self.threads_input.setValidator(QIntValidator(1, 30))
+        self.threads_input.setValidator(QIntValidator(1, 50))
         self.threads_input.setMaximumWidth(100)
         self.threads_input.textChanged.connect(self.auto_save_settings)
         threads_help = QLabel("(1-50，默认10)")
