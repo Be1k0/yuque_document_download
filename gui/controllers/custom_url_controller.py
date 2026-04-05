@@ -451,29 +451,14 @@ class CustomUrlController(BaseController):
             # 使用 YuqueClient 下载文档内容
             if self._temp_cookies is not None:
                 if self._temp_cookies:
-                    self.log_info("使用缓存与本地登录Cookie进行下载")
+                    self.log_info("使用解析阶段获取的Cookie进行下载")
                 else:
-                    self.log_info("使用空与本地登录Cookie进行下载")
-                    
-                # 合并本地登录 Cookie 以防 _temp_cookies 丢失 _yuque_session 导致401等问题
-                merged_cookies_dict = {}
-                try:
-                    from src.libs.tools import get_local_cookies
-                    loc_cookies = get_local_cookies()
-                    if loc_cookies:
-                        for item in loc_cookies.split(';'):
-                            if '=' in item:
-                                k, v = item.split('=', 1)
-                                merged_cookies_dict[k.strip()] = v.strip()
-                except Exception:
-                    pass
-                
-                # 覆盖入 temp_cookies (temp_cookies 优先级更高，比如新得到的权限cookie)
-                if self._temp_cookies:
-                    for k, v in self._temp_cookies.items():
-                        merged_cookies_dict[k.strip()] = str(v).strip()
-                        
-                cookies_str = "; ".join([f"{name}={value}" for name, value in merged_cookies_dict.items() if name])
+                    self.log_info("使用空Cookie进行下载")
+
+                # 公开知识库下载严格使用解析阶段得到的 Cookie，避免重新引入本地登录态造成权限串扰
+                cookies_str = "; ".join(
+                    [f"{name}={value}" for name, value in self._temp_cookies.items() if str(name).strip()]
+                )
                 
                 async with YuqueClient() as client:
                     await self._download_docs_with_custom_cookies(client, docs, output_dir, skip_existing, linebreak, download_images, image_downloader, cookies_str, level_map, options)
@@ -581,7 +566,9 @@ class CustomUrlController(BaseController):
                     success_flag = await client.export_excel(doc_id, file_path, is_table=(doc_type_u == 'TABLE')) if doc_id else False
                 else:
                     content = await client.export_markdown(namespace, identifier, line_break=linebreak)
-                    if content:
+                    if content is not None:
+                        if not content:
+                            content = "\n"
                         File().write(file_path, content)
                         success_flag = True
 
@@ -715,7 +702,9 @@ class CustomUrlController(BaseController):
                     success_flag = await client.export_excel(doc_id, file_path, cookies_str, is_table=(doc_type_u == 'TABLE')) if doc_id else False
                 else:
                     content = await client.export_markdown_with_cookies(namespace, identifier, cookies_str, line_break=linebreak)
-                    if content:
+                    if content is not None:
+                        if not content:
+                            content = "\n"
                         File().write(file_path, content)
                         success_flag = True
 
