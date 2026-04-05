@@ -10,6 +10,7 @@ from src.libs.log import Log
 from src.libs.constants import MutualAnswer
 from src.libs.debug_logger import DebugLogger
 from src.libs.tools import resolve_book_namespace
+from src.ui.font_utils import stabilize_combo_box_font
 from qasync import asyncSlot
 from gui.controllers.article_controller import ArticleController
 from src.ui.theme_manager import THEME_MANAGER
@@ -152,6 +153,7 @@ class ArticleSelectionDialog(QDialog):
         book_selection_label = QLabel("选择知识库:")
         self.book_dropdown = QComboBox()
         self.book_dropdown.setMinimumWidth(200)
+        stabilize_combo_box_font(self.book_dropdown)
         self.book_dropdown.currentTextChanged.connect(self.load_articles_for_book_dropdown)
 
         # 全选知识库按钮

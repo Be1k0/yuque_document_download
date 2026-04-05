@@ -5,7 +5,7 @@ QMainWindow, QWidget#CentralWidget {
 
 QWidget {
     font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    font-size: 14px;
+    font-size: 10pt;
     color: @text_color;
 }
 
@@ -107,7 +107,7 @@ QPushButton#VersionButton {
     border: none;
     border-radius: 999px;
     background: transparent;
-    font-size: 13px;
+    font-size: 10pt;
     font-weight: normal;
 }
 
@@ -350,7 +350,7 @@ QProgressDialog#UpdateProgressDialog {
 QProgressDialog#UpdateProgressDialog QLabel {
     min-width: 390px;
     color: @text_color;
-    font-size: 13px;
+    font-size: 10pt;
     padding: 8px 4px 12px 4px;
 }
 
@@ -361,7 +361,7 @@ QProgressBar#UpdateProgressBar {
     background-color: @list_selected_bg;
     text-align: center;
     color: @text_secondary;
-    font-size: 11px;
+    font-size: 8pt;
     font-weight: bold;
 }
 
@@ -414,7 +414,7 @@ QTabBar::tab:selected {
 
 /* 特定按钮样式增强 */
 QPushButton#ExportButton {
-    font-size: 14px;
+    font-size: 10pt;
     padding: 8px 20px;
 }
 

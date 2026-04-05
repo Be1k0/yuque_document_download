@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.libs.constants import GLOBAL_CONFIG
+from src.ui.font_utils import stabilize_combo_box_font
 from utils import static_resource_path, StdoutRedirector, QPasswordLineEdit
 from .components.login_manager import LoginManagerMixin
 from .components.book_manager import BookManagerMixin
@@ -403,6 +404,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.doc_format_combo = QComboBox()
         self.doc_format_combo.setFixedWidth(140)
         self.doc_format_combo.setStyleSheet(" padding: 2px;")
+        stabilize_combo_box_font(self.doc_format_combo)
         self.doc_format_combo.addItem(" Markdown ", "md")
         doc_format_layout.addWidget(doc_format_label)
         doc_format_layout.addWidget(self.doc_format_combo)
@@ -415,6 +417,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.board_format_combo = QComboBox()
         self.board_format_combo.setFixedWidth(140)
         self.board_format_combo.setStyleSheet(" padding: 2px;")
+        stabilize_combo_box_font(self.board_format_combo)
         self.board_format_combo.addItem(" PNG图片 ", "png")
         board_format_layout.addWidget(board_format_label)
         board_format_layout.addWidget(self.board_format_combo)
@@ -427,6 +430,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.sheet_format_combo = QComboBox()
         self.sheet_format_combo.setFixedWidth(140)
         self.sheet_format_combo.setStyleSheet(" padding: 2px;")
+        stabilize_combo_box_font(self.sheet_format_combo)
         self.sheet_format_combo.addItem(" Excel ", "xlsx")
         sheet_format_layout.addWidget(sheet_format_label)
         sheet_format_layout.addWidget(self.sheet_format_combo)
@@ -439,6 +443,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.table_format_combo = QComboBox()
         self.table_format_combo.setFixedWidth(140)
         self.table_format_combo.setStyleSheet(" padding: 2px;")
+        stabilize_combo_box_font(self.table_format_combo)
         self.table_format_combo.addItem(" Excel ", "xlsx")
         table_format_layout.addWidget(table_format_label)
         table_format_layout.addWidget(self.table_format_combo)

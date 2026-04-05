@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QGroupBox, QMessageBox, QAbstractItemView, QFileDialog, QTreeWidgetItem, QTreeWidgetItemIterator, QComboBox, QGridLayout
 )
 from PyQt6.QtCore import Qt
+from src.ui.font_utils import stabilize_combo_box_font
 
 class CustomUrlManagerMixin:
     """公开知识库导出管理器类
@@ -166,6 +167,7 @@ class CustomUrlManagerMixin:
         self.custom_doc_format_combo = QComboBox()
         self.custom_doc_format_combo.setFixedWidth(140)
         self.custom_doc_format_combo.setStyleSheet(" padding: 2px;")
+        stabilize_combo_box_font(self.custom_doc_format_combo)
         self.custom_doc_format_combo.addItem(" Markdown ", "md")
         doc_format_layout.addWidget(doc_format_label)
         doc_format_layout.addWidget(self.custom_doc_format_combo)
@@ -178,6 +180,7 @@ class CustomUrlManagerMixin:
         self.custom_board_format_combo = QComboBox()
         self.custom_board_format_combo.setFixedWidth(140)
         self.custom_board_format_combo.setStyleSheet(" padding: 2px;")
+        stabilize_combo_box_font(self.custom_board_format_combo)
         self.custom_board_format_combo.addItem(" PNG图片 ", "png")
         board_format_layout.addWidget(board_format_label)
         board_format_layout.addWidget(self.custom_board_format_combo)

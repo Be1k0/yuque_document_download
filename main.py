@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 from src.libs.log import Log
+from src.ui.font_utils import get_stable_ui_font
 from gui.main_window import YuqueGUI
 
 def excepthook(exc_type, exc_value, exc_traceback):
@@ -96,6 +97,7 @@ def main():
 
         # 创建应用程序实例
         app = QApplication(sys.argv)
+        app.setFont(get_stable_ui_font())
         
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__ if not "__compiled__" in globals() else sys.argv[0])), "favicon.ico")
         if os.path.exists(icon_path):
