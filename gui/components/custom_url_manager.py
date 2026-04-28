@@ -324,6 +324,8 @@ class CustomUrlManagerMixin:
         
         self.cust_download_btn.setEnabled(False)
         self.parse_btn.setEnabled(False)
+        if hasattr(self, 'refresh_progress_widget_visibility'):
+            self.refresh_progress_widget_visibility()
         
         # 重置进度条格式
         if hasattr(self, 'progress_bar'):
@@ -347,9 +349,9 @@ class CustomUrlManagerMixin:
 
     def on_custom_download_progress_update(self, current, total):
         """更新进度条数值"""
-        if hasattr(self, 'progress_bar') and hasattr(self, 'progress_widget'):
-            if not self.progress_widget.isVisible():
-                 self.progress_widget.setVisible(True)
+        if hasattr(self, 'progress_bar'):
+            if hasattr(self, 'refresh_progress_widget_visibility'):
+                self.refresh_progress_widget_visibility()
             self.progress_bar.setMaximum(total)
             self.progress_bar.setValue(current)
 
@@ -358,6 +360,8 @@ class CustomUrlManagerMixin:
         self.cust_download_btn.setEnabled(True)
         self.parse_btn.setEnabled(True)
         self.custom_status_label.setText("导出完成")
+        if hasattr(self, 'refresh_progress_widget_visibility'):
+            self.refresh_progress_widget_visibility()
         
         if hasattr(self, 'progress_bar'):
              self.progress_bar.setValue(self.progress_bar.maximum())

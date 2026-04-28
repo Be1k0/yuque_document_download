@@ -105,8 +105,21 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
     
     def on_tab_changed(self, index):
         """标签页切换时的处理"""
-        show_progress = (index == self.selection_tab_index) or (index == self.selection_tab_index + 1)
-        self.progress_widget.setVisible(show_progress)
+        self.refresh_progress_widget_visibility(index)
+
+    def _should_show_progress_widget(self, index: int) -> bool:
+        return index in {
+            getattr(self, 'selection_tab_index', -1),
+            getattr(self, 'custom_export_tab_index', -1),
+        }
+
+    def refresh_progress_widget_visibility(self, index: int | None = None):
+        """根据当前标签页刷新进度条显示状态"""
+        if not hasattr(self, 'progress_widget') or not hasattr(self, 'main_tabs'):
+            return
+
+        target_index = self.main_tabs.currentIndex() if index is None else index
+        self.progress_widget.setVisible(self._should_show_progress_widget(target_index))
 
     def init_ui(self):
         # 主界面布局
@@ -129,6 +142,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
 
         # 创建Tab小部件
         tabs = QTabWidget()
+        self.main_tabs = tabs
 
         # 登录表单页
         login_page = QWidget()
@@ -526,7 +540,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         # 添加标签页
         tabs.addTab(login_page, "登录")
         self.selection_tab_index = tabs.addTab(selection_page, "知识库导出")
-        tabs.addTab(custom_url_page, "公开知识库导出")
+        self.custom_export_tab_index = tabs.addTab(custom_url_page, "公开知识库导出")
         tabs.addTab(settings_page, "设置")
         log_page = self.create_log_page()
         tabs.addTab(log_page, "运行日志")
@@ -561,6 +575,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         
         # 默认隐藏进度条，仅在知识库选择页显示
         self.progress_widget.setVisible(False)
+        self.refresh_progress_widget_visibility()
 
         copyright_label = QLabel("Copyright © 2025-2026 By Be1k0")
         copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

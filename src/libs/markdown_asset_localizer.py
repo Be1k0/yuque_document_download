@@ -1,3 +1,8 @@
+'''
+Author: Be1k0
+URL: https://github.com/Be1k0/YuQue-BdT
+'''
+
 import html
 import json
 import mimetypes
@@ -162,6 +167,7 @@ def parse_card_payload(value: str) -> Dict[str, Any]:
     if raw.startswith("data:"):
         raw = raw[5:]
 
+    # 语雀卡片的 value 可能同时混入 HTML 转义和 URL 编码。
     candidates = [raw, unquote(raw)]
     for candidate in candidates:
         candidate = candidate.strip()
@@ -313,6 +319,7 @@ class MarkdownAssetLocalizer:
     def _resolve_output_paths(self, source_path: Path) -> Tuple[Path, Path]:
         parent_dir = source_path.parent
         folder_name = source_path.stem
+        # 已经是“同名目录 + Markdown”结构时，直接复用现有目录。
         if parent_dir.name == folder_name:
             return source_path, parent_dir
 
@@ -482,6 +489,7 @@ class MarkdownAssetLocalizer:
             raise RuntimeError("附件输出目录未初始化")
 
         candidate = self.asset_dir / sanitize_filename(filename)
+        # 用内存占位，避免同一轮处理中出现重名覆盖。
         if candidate not in self.reserved_paths:
             self.reserved_paths.add(candidate)
             return candidate
@@ -545,6 +553,7 @@ class MarkdownAssetLocalizer:
 
         try:
             if self.is_direct_asset_url(url):
+                # 公开知识库里的非图片附件通常需要登录 Cookie 才能下载。
                 if not self.has_login_cookie and self._is_login_required_direct_asset(url, label, bang):
                     self.stats.login_required_count += 1
                     return f"{original} <!-- 需要登录后才能离线保存该文件 -->"
@@ -597,6 +606,7 @@ class MarkdownAssetLocalizer:
         if not self.stats:
             return
 
+        # 不论成功还是失败都推进进度，避免界面卡在半途。
         self.stats.processed_candidates += 1
         if self.progress_callback:
             self.progress_callback(
