@@ -4,7 +4,9 @@ URL: https://github.com/Be1k0/YuQue-BdT
 '''
 
 import aiohttp
+import json
 from typing import Dict, Any, List, Optional
+from urllib.parse import urljoin, urlparse
 from ..libs.constants import GLOBAL_CONFIG
 from ..libs.encrypt import encrypt_password
 from ..libs.log import Log
@@ -52,6 +54,28 @@ class YuqueClient:
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
         return self.session
+
+    def _debug_log_request(self, url: str, method: str, headers: Dict[str, Any], data: Any = None) -> None:
+        if _has_debug_logger and Log.is_debug_mode():
+            DebugLogger.log_request(url, method, headers, data)
+
+    def _debug_log_response(self, status_code: int, headers: Dict[str, Any], body: Any) -> None:
+        if _has_debug_logger and Log.is_debug_mode():
+            DebugLogger.log_response(status_code, headers, self._shrink_debug_body(body))
+
+    def _debug_log_data(self, label: str, data: Any) -> None:
+        if _has_debug_logger and Log.is_debug_mode():
+            DebugLogger.log_data(label, data)
+
+    @staticmethod
+    def _shrink_debug_body(body: Any, max_length: int = 12000) -> Any:
+        if isinstance(body, (bytes, bytearray)):
+            return f"<binary body omitted, size={len(body)} bytes>"
+
+        if isinstance(body, str) and len(body) > max_length:
+            return body[:max_length] + "\n...<truncated>..."
+
+        return body
 
     async def login(self, username: str, password: str) -> bool:
         """登录语雀并存储cookies
@@ -445,11 +469,9 @@ class YuqueClient:
 
 
 
-    async def export_excel(self, doc_id: str, file_path: str, cookies_str: str = "", is_table: bool = False) -> bool:
-        """导出 Excel"""
+    async def _export_binary_file(self, doc_id: str, file_path: str, export_type: str, cookies_str: str = "") -> bool:
+        """导出二进制文件"""
         import asyncio
-        import re
-        import urllib.parse
         
         base_url = "https://www.yuque.com"
         export_url = f"{base_url}/api/docs/{doc_id}/export"
@@ -491,60 +513,121 @@ class YuqueClient:
         elif loc_cookies:
             yuque_headers["Cookie"] = loc_cookies
         
-        payload = {"type": "excel", "force": 0}
+        payload = {"type": export_type, "force": 0}
+        export_name = "Word" if export_type == "word" else "Excel"
+        self._debug_log_data(
+            f"{export_name} 导出上下文",
+            {
+                "doc_id": doc_id,
+                "file_path": file_path,
+                "export_type": export_type,
+                "has_custom_cookies": bool(cookies_str),
+                "cookie_names": list(cookies_dict.keys()) if cookies_dict else [],
+            }
+        )
         
         session = await self._get_session()
         download_url_path = ""
+        oss_direct_url = ""
         
         while True:
             try:
                 req_kwargs = {"json": payload, "headers": yuque_headers}
                 if cookies_dict:
                      req_kwargs["cookies"] = cookies_dict
-                     
+
+                self._debug_log_request(export_url, "POST", yuque_headers, payload)
                 async with session.post(export_url, **req_kwargs) as response:
+                    response_text = await response.text()
+                    self._debug_log_response(response.status, response.headers, response_text)
                     response.raise_for_status()
-                    res_data = await response.json()
+                    res_data = json.loads(response_text) if response_text else {}
                     state = res_data.get("data", {}).get("state")
                     
                     if state == "pending":
                         await asyncio.sleep(3)
                     elif state == "success":
                         download_url_path = res_data.get("data", {}).get("url")
+                        self._debug_log_data(
+                            f"{export_name} 导出任务成功",
+                            {
+                                "doc_id": doc_id,
+                                "download_url": download_url_path,
+                            }
+                        )
                         break
                     else:
-                        Log.error(f"Excel 导出未知状态: {res_data}")
+                        Log.error(f"{export_name} 导出未知状态: {res_data}")
                         return False
             except Exception as e:
-                Log.error(f"Excel 导出请求错误: {e}")
+                Log.error(f"{export_name} 导出请求错误: {e}")
                 return False
 
         if download_url_path:
-            full_download_url = base_url + download_url_path
-            oss_direct_url = ""
-            
-            try:
-                req_kwargs = {"allow_redirects": False, "headers": yuque_headers}
-                if cookies_dict:
-                    req_kwargs["cookies"] = cookies_dict
-                async with session.get(full_download_url, **req_kwargs) as yuque_dl_resp:
-                    if yuque_dl_resp.status in (301, 302):
-                        oss_direct_url = yuque_dl_resp.headers.get("Location")
-                    else:
-                        Log.error(f"预期返回 302 跳转，但返回了 {yuque_dl_resp.status}")
-                        return False
-            except Exception as e:
-                Log.error(f"获取 OSS 链接失败: {e}")
-                return False
+            full_download_url = urljoin(base_url, str(download_url_path))
+            parsed_download_url = urlparse(full_download_url)
+
+            # Word 导出有时直接返回 OSS 签名地址，这种情况不能再带 JSON 头去探测 302。
+            if parsed_download_url.netloc and not parsed_download_url.netloc.endswith("yuque.com"):
+                oss_direct_url = full_download_url
+                self._debug_log_data(
+                    f"{export_name} 直接下载地址",
+                    {
+                        "doc_id": doc_id,
+                        "url": oss_direct_url,
+                    }
+                )
+            else:
+                try:
+                    req_kwargs = {"allow_redirects": False, "headers": yuque_headers}
+                    if cookies_dict:
+                        req_kwargs["cookies"] = cookies_dict
+
+                    self._debug_log_request(full_download_url, "GET", yuque_headers)
+                    async with session.get(full_download_url, **req_kwargs) as yuque_dl_resp:
+                        redirect_body = await yuque_dl_resp.text()
+                        self._debug_log_response(yuque_dl_resp.status, yuque_dl_resp.headers, redirect_body)
+                        if yuque_dl_resp.status in (301, 302):
+                            oss_direct_url = yuque_dl_resp.headers.get("Location")
+                            self._debug_log_data(
+                                f"{export_name} 导出跳转地址",
+                                {
+                                    "doc_id": doc_id,
+                                    "full_download_url": full_download_url,
+                                    "location": oss_direct_url,
+                                }
+                            )
+                        else:
+                            Log.error(f"预期返回 302 跳转，但返回了 {yuque_dl_resp.status}")
+                            return False
+                except Exception as e:
+                    Log.error(f"获取 OSS 链接失败: {e}")
+                    return False
 
         if oss_direct_url:
+            oss_direct_url = urljoin(base_url, str(oss_direct_url))
             clean_headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
                 "Referer": "https://www.yuque.com/"
             }
             
             try:
+                self._debug_log_request(oss_direct_url, "GET", clean_headers)
                 async with aiohttp.request("GET", oss_direct_url, headers=clean_headers) as dl_response:
+                    if dl_response.status >= 400:
+                        error_body = await dl_response.text()
+                        self._debug_log_response(dl_response.status, dl_response.headers, error_body)
+                        dl_response.raise_for_status()
+
+                    self._debug_log_response(
+                        dl_response.status,
+                        dl_response.headers,
+                        {
+                            "note": "binary body omitted",
+                            "content_type": dl_response.headers.get("Content-Type", ""),
+                            "content_length": dl_response.headers.get("Content-Length", ""),
+                        }
+                    )
                     dl_response.raise_for_status()
                     
                     with open(file_path, 'wb') as f:
@@ -553,9 +636,17 @@ class YuqueClient:
                                 f.write(chunk)
                 return True
             except Exception as e:
-                Log.error(f"写入 Excel 文件错误: {e}")
+                Log.error(f"写入 {export_name} 文件错误: {e}")
                 return False
         return False
+
+    async def export_excel(self, doc_id: str, file_path: str, cookies_str: str = "", is_table: bool = False) -> bool:
+        """导出 Excel"""
+        return await self._export_binary_file(doc_id, file_path, "excel", cookies_str)
+
+    async def export_word(self, doc_id: str, file_path: str, cookies_str: str = "") -> bool:
+        """导出 Word"""
+        return await self._export_binary_file(doc_id, file_path, "word", cookies_str)
 
     async def export_board_png(self, url: str, file_path: str, cookies_str: str = "") -> bool:
         """使用 Playwright 导出 Board 画板为图片"""
@@ -722,6 +813,11 @@ class YuqueApi:
     async def export_excel(doc_id: str, output_path: str, cookies_str: str = "", is_table: bool = False) -> bool:
         """导出 Excel"""
         return await default_client.export_excel(doc_id, output_path, cookies_str, is_table)
+
+    @staticmethod
+    async def export_word(doc_id: str, output_path: str, cookies_str: str = "") -> bool:
+        """导出 Word"""
+        return await default_client.export_word(doc_id, output_path, cookies_str)
 
     @staticmethod
     async def export_board_png(url: str, output_path: str, cookies_str: str = "") -> bool:

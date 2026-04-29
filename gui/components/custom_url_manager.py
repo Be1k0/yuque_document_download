@@ -163,6 +163,7 @@ class CustomUrlManagerMixin:
         checkbox_layout.addWidget(self.custom_keep_linebreak_checkbox)
 
         self.custom_download_images_checkbox = QCheckBox("下载文档中的文件到本地")
+        self.custom_download_images_checkbox.setToolTip("将 Markdown 文档中的图片、附件和卡片媒体下载到本地，并更新链接")
         self.custom_download_images_checkbox.setChecked(True)
         self.custom_download_images_checkbox.setStyleSheet(" padding: 2px 0;")
         checkbox_layout.addWidget(self.custom_download_images_checkbox)
@@ -184,10 +185,13 @@ class CustomUrlManagerMixin:
         self.custom_doc_format_combo.setStyleSheet(" padding: 2px;")
         stabilize_combo_box_font(self.custom_doc_format_combo)
         self.custom_doc_format_combo.addItem(" Markdown ", "md")
+        self.custom_doc_format_combo.setToolTip("公开知识库普通文档仅支持 Markdown 导出")
+        self.custom_doc_format_combo.currentIndexChanged.connect(self.update_custom_asset_download_option)
         doc_format_layout.addWidget(doc_format_label)
         doc_format_layout.addWidget(self.custom_doc_format_combo)
         doc_format_layout.addStretch(1)
         format_layout.addLayout(doc_format_layout)
+        self.update_custom_asset_download_option()
         
         # 画板导出格式
         board_format_layout = QHBoxLayout()
@@ -235,6 +239,21 @@ class CustomUrlManagerMixin:
         self.custom_article_list.itemSelectionChanged.connect(self.on_custom_selection_changed)
 
         return page
+
+    def update_custom_asset_download_option(self):
+        """同步公开导出页的文档资源选项状态"""
+        if not hasattr(self, 'custom_doc_format_combo') or not hasattr(self, 'custom_download_images_checkbox'):
+            return
+
+        is_markdown = self.custom_doc_format_combo.currentData() == "md"
+        if not is_markdown and self.custom_download_images_checkbox.isChecked():
+            self.custom_download_images_checkbox.setChecked(False)
+
+        self.custom_download_images_checkbox.setEnabled(is_markdown)
+        if is_markdown:
+            self.custom_download_images_checkbox.setToolTip("将 Markdown 文档中的图片、附件和卡片媒体下载到本地，并更新链接")
+        else:
+            self.custom_download_images_checkbox.setToolTip("仅 Markdown 文档导出格式支持下载文档中的文件到本地")
     
     @asyncSlot()
     async def on_parse_clicked(self):
@@ -330,11 +349,16 @@ class CustomUrlManagerMixin:
         # 重置进度条格式
         if hasattr(self, 'progress_bar'):
              self.progress_bar.setFormat("导出进度: %p%")
+
+        self._custom_asset_download_requested = (
+            self.custom_doc_format_combo.currentData() == "md"
+            and self.custom_download_images_checkbox.isChecked()
+        )
         
         options = {
             "skip": self.custom_skip_local_checkbox.isChecked(),
             "linebreak": self.custom_keep_linebreak_checkbox.isChecked(),
-            "download_images": self.custom_download_images_checkbox.isChecked(),
+            "download_images": self._custom_asset_download_requested,
             "doc_format": self.custom_doc_format_combo.currentData(),
             "board_format": self.custom_board_format_combo.currentData()
         }
@@ -377,7 +401,7 @@ class CustomUrlManagerMixin:
         asset_failed = self.custom_url_controller._asset_failed_count
         
         msg = f"导出完成!\n成功下载: {downloaded}\n跳过文件: {skipped}\n失败文件: {failed}"
-        if self.custom_download_images_checkbox.isChecked():
+        if getattr(self, '_custom_asset_download_requested', False):
             msg += f"\n已离线保存资源数: {localized}"
             if login_required:
                 msg += f"\n需登录后处理数: {login_required}"

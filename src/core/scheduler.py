@@ -188,8 +188,11 @@ class Scheduler:
 
         # 获取扩展名
         doc_type_u = doc_type.upper()
+        doc_format = str(getattr(answer, 'doc_format', 'md')).lower()
         ext = '.md'
-        if doc_type_u == 'BOARD':
+        if doc_type_u in ['DOC', 'DOCUMENT'] and doc_format == 'word':
+            ext = '.docx'
+        elif doc_type_u == 'BOARD':
             ext = '.png'
         elif doc_type_u in ['SHEET', 'TABLE']:
             fmt = getattr(answer, 'sheet_format' if doc_type_u == 'SHEET' else 'table_format', 'XLSX (Excel)')
@@ -271,8 +274,11 @@ class Scheduler:
                 ensure_dir_exists(target_dir)
 
         doc_type = doc.get('type', '').upper()
+        doc_format = str(getattr(answer, 'doc_format', 'md')).lower()
         ext = '.md'
-        if doc_type == 'BOARD':
+        if doc_type in ['DOC', 'DOCUMENT'] and doc_format == 'word':
+            ext = '.docx'
+        elif doc_type == 'BOARD':
             ext = '.png'
         elif doc_type in ['SHEET', 'TABLE']:
             fmt = getattr(answer, 'sheet_format' if doc_type == 'SHEET' else 'table_format', 'XLSX (Excel)')
@@ -300,6 +306,18 @@ class Scheduler:
             Log.info(f"正在导出 Excel (id: {doc_id}): {doc_title}")
             is_table = (doc_type == 'TABLE')
             success = await self.client.export_excel(doc_id, file_path, is_table=is_table)
+            if success:
+                answer.downloaded_files.append(file_path)
+                Log.success(f"保存成功: {os.path.relpath(file_path, book_dir)}")
+            return success
+
+        elif doc_type in ['DOC', 'DOCUMENT'] and ext == '.docx':
+            doc_id = str(doc.get('id', ''))
+            if not doc_id:
+                Log.error(f"导出 Word 失败,缺少 doc_id: {doc_title}")
+                return False
+            Log.info(f"正在导出 Word (id: {doc_id}): {doc_title}")
+            success = await self.client.export_word(doc_id, file_path)
             if success:
                 answer.downloaded_files.append(file_path)
                 Log.success(f"保存成功: {os.path.relpath(file_path, book_dir)}")

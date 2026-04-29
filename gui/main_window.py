@@ -121,6 +121,21 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         target_index = self.main_tabs.currentIndex() if index is None else index
         self.progress_widget.setVisible(self._should_show_progress_widget(target_index))
 
+    def update_main_asset_download_option(self):
+        """同步主导出页的文档资源选项状态"""
+        if not hasattr(self, 'doc_format_combo') or not hasattr(self, 'download_images_checkbox'):
+            return
+
+        is_markdown = self.doc_format_combo.currentData() == "md"
+        if not is_markdown and self.download_images_checkbox.isChecked():
+            self.download_images_checkbox.setChecked(False)
+
+        self.download_images_checkbox.setEnabled(is_markdown)
+        if is_markdown:
+            self.download_images_checkbox.setToolTip("将 Markdown 文档中的图片、附件和卡片媒体下载到本地，并更新链接")
+        else:
+            self.download_images_checkbox.setToolTip("仅 Markdown 文档导出格式支持下载文档中的文件到本地")
+
     def init_ui(self):
         # 主界面布局
         central_widget = QWidget()
@@ -425,10 +440,13 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         self.doc_format_combo.setStyleSheet(" padding: 2px;")
         stabilize_combo_box_font(self.doc_format_combo)
         self.doc_format_combo.addItem(" Markdown ", "md")
+        self.doc_format_combo.addItem(" Word文档 ", "word")
+        self.doc_format_combo.currentIndexChanged.connect(self.update_main_asset_download_option)
         doc_format_layout.addWidget(doc_format_label)
         doc_format_layout.addWidget(self.doc_format_combo)
         doc_format_layout.addStretch(1)
         format_layout.addLayout(doc_format_layout)
+        self.update_main_asset_download_option()
         
         # 画板导出格式
         board_format_layout = QHBoxLayout()

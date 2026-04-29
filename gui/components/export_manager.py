@@ -137,6 +137,10 @@ class ExportManagerMixin:
             # 初始化资源处理统计
             self._total_localized_assets = 0
             self._asset_summary = {}
+            self._asset_download_requested = (
+                str(answer.doc_format).lower() == 'md'
+                and self.download_images_checkbox.isChecked()
+            )
 
             # 禁用UI
             self._set_ui_enabled(False)
@@ -151,7 +155,7 @@ class ExportManagerMixin:
             self.progress_bar.setFormat("文档导出完成")
 
             # 文档资源离线化
-            if self.download_images_checkbox.isChecked():
+            if self._asset_download_requested:
                 self.progress_bar.setFormat("正在准备处理文档资源...")
                 self.log_handler.emit_log("开始处理 Markdown 文档中的文件链接...")
                 markdown_meta = getattr(answer, 'downloaded_markdown_meta', {})
@@ -229,7 +233,7 @@ class ExportManagerMixin:
         if failed_count > 0:
             msg += f"\n失败文档数：{failed_count}"
             
-        if self.download_images_checkbox.isChecked():
+        if getattr(self, '_asset_download_requested', False):
             localized = getattr(self, '_total_localized_assets', 0)
             summary = getattr(self, '_asset_summary', {})
             msg += f"\n已离线保存资源数: {localized}"

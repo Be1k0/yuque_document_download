@@ -433,7 +433,12 @@ class CustomUrlController(BaseController):
         options = options or {}
         skip_existing = options.get("skip", True)
         linebreak = options.get("linebreak", True)
-        download_images = options.get("download_images", True)
+        doc_format = str(options.get("doc_format", "md")).lower()
+        if doc_format != "md":
+            self.log_info("公开知识库普通文档仅支持 Markdown 导出，已自动回退为 Markdown")
+            doc_format = "md"
+            options["doc_format"] = "md"
+        download_images = bool(options.get("download_images", True)) and doc_format == "md"
         login_cookie_string = get_local_cookies()
         login_ready = has_login_cookie(login_cookie_string)
         
@@ -573,8 +578,11 @@ class CustomUrlController(BaseController):
                     ensure_dir_exists(target_dir)
 
             doc_type_u = doc_type.upper() if doc_type else 'DOC'
+            doc_format = str(options.get('doc_format', 'md')).lower()
             ext = '.md'
-            if doc_type_u == 'BOARD':
+            if doc_type_u in ['DOC', 'DOCUMENT'] and doc_format == 'word':
+                ext = '.docx'
+            elif doc_type_u == 'BOARD':
                 ext = '.png'
             elif doc_type_u in ['SHEET', 'TABLE']:
                 fmt = options.get('sheet_format' if doc_type_u == 'SHEET' else 'table_format', 'XLSX (Excel)')
@@ -611,6 +619,9 @@ class CustomUrlController(BaseController):
                 if doc_type_u == 'BOARD':
                     full_url = url if url.startswith('http') else f"https://www.yuque.com/{namespace}/{identifier}"
                     success_flag = await client.export_board_png(full_url, file_path)
+                elif doc_type_u in ['DOC', 'DOCUMENT'] and ext == '.docx':
+                    doc_id = str(doc.get('id', ''))
+                    success_flag = await client.export_word(doc_id, file_path) if doc_id else False
                 elif doc_type_u in ['SHEET', 'TABLE'] and ext == '.xlsx':
                     doc_id = str(doc.get('id', ''))
                     success_flag = await client.export_excel(doc_id, file_path, is_table=(doc_type_u == 'TABLE')) if doc_id else False
@@ -704,8 +715,11 @@ class CustomUrlController(BaseController):
                     ensure_dir_exists(target_dir)
 
             doc_type_u = doc_type.upper() if doc_type else 'DOC'
+            doc_format = str(options.get('doc_format', 'md')).lower()
             ext = '.md'
-            if doc_type_u == 'BOARD':
+            if doc_type_u in ['DOC', 'DOCUMENT'] and doc_format == 'word':
+                ext = '.docx'
+            elif doc_type_u == 'BOARD':
                 ext = '.png'
             elif doc_type_u in ['SHEET', 'TABLE']:
                 fmt = options.get('sheet_format' if doc_type_u == 'SHEET' else 'table_format', 'XLSX (Excel)')
@@ -742,6 +756,9 @@ class CustomUrlController(BaseController):
                 if doc_type_u == 'BOARD':
                     full_url = url if url.startswith('http') else f"https://www.yuque.com/{namespace}/{identifier}"
                     success_flag = await client.export_board_png(full_url, file_path, cookies_str)
+                elif doc_type_u in ['DOC', 'DOCUMENT'] and ext == '.docx':
+                    doc_id = str(doc.get('id', ''))
+                    success_flag = await client.export_word(doc_id, file_path, cookies_str) if doc_id else False
                 elif doc_type_u in ['SHEET', 'TABLE'] and ext == '.xlsx':
                     doc_id = str(doc.get('id', ''))
                     success_flag = await client.export_excel(doc_id, file_path, cookies_str, is_table=(doc_type_u == 'TABLE')) if doc_id else False
