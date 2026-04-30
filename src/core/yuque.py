@@ -514,7 +514,11 @@ class YuqueClient:
             yuque_headers["Cookie"] = loc_cookies
         
         payload = {"type": export_type, "force": 0}
-        export_name = "Word" if export_type == "word" else "Excel"
+        export_name = {
+            "word": "Word",
+            "excel": "Excel",
+            "pdf": "PDF",
+        }.get(export_type, export_type.upper())
         self._debug_log_data(
             f"{export_name} 导出上下文",
             {
@@ -647,6 +651,10 @@ class YuqueClient:
     async def export_word(self, doc_id: str, file_path: str, cookies_str: str = "") -> bool:
         """导出 Word"""
         return await self._export_binary_file(doc_id, file_path, "word", cookies_str)
+
+    async def export_pdf(self, doc_id: str, file_path: str, cookies_str: str = "") -> bool:
+        """导出 PDF"""
+        return await self._export_binary_file(doc_id, file_path, "pdf", cookies_str)
 
     async def export_board_png(self, url: str, file_path: str, cookies_str: str = "") -> bool:
         """使用 Playwright 导出 Board 画板为图片"""
@@ -818,6 +826,11 @@ class YuqueApi:
     async def export_word(doc_id: str, output_path: str, cookies_str: str = "") -> bool:
         """导出 Word"""
         return await default_client.export_word(doc_id, output_path, cookies_str)
+
+    @staticmethod
+    async def export_pdf(doc_id: str, output_path: str, cookies_str: str = "") -> bool:
+        """导出 PDF"""
+        return await default_client.export_pdf(doc_id, output_path, cookies_str)
 
     @staticmethod
     async def export_board_png(url: str, output_path: str, cookies_str: str = "") -> bool:

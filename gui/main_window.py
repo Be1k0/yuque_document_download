@@ -441,6 +441,7 @@ class YuqueGUI(QMainWindow, LoginManagerMixin, BookManagerMixin, ArticleManagerM
         stabilize_combo_box_font(self.doc_format_combo)
         self.doc_format_combo.addItem(" Markdown ", "md")
         self.doc_format_combo.addItem(" Word文档 ", "word")
+        self.doc_format_combo.addItem(" PDF文档 ", "pdf")
         self.doc_format_combo.currentIndexChanged.connect(self.update_main_asset_download_option)
         doc_format_layout.addWidget(doc_format_label)
         doc_format_layout.addWidget(self.doc_format_combo)

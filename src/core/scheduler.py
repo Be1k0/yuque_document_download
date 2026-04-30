@@ -192,6 +192,8 @@ class Scheduler:
         ext = '.md'
         if doc_type_u in ['DOC', 'DOCUMENT'] and doc_format == 'word':
             ext = '.docx'
+        elif doc_type_u in ['DOC', 'DOCUMENT'] and doc_format == 'pdf':
+            ext = '.pdf'
         elif doc_type_u == 'BOARD':
             ext = '.png'
         elif doc_type_u in ['SHEET', 'TABLE']:
@@ -278,6 +280,8 @@ class Scheduler:
         ext = '.md'
         if doc_type in ['DOC', 'DOCUMENT'] and doc_format == 'word':
             ext = '.docx'
+        elif doc_type in ['DOC', 'DOCUMENT'] and doc_format == 'pdf':
+            ext = '.pdf'
         elif doc_type == 'BOARD':
             ext = '.png'
         elif doc_type in ['SHEET', 'TABLE']:
@@ -318,6 +322,18 @@ class Scheduler:
                 return False
             Log.info(f"正在导出 Word (id: {doc_id}): {doc_title}")
             success = await self.client.export_word(doc_id, file_path)
+            if success:
+                answer.downloaded_files.append(file_path)
+                Log.success(f"保存成功: {os.path.relpath(file_path, book_dir)}")
+            return success
+
+        elif doc_type in ['DOC', 'DOCUMENT'] and ext == '.pdf':
+            doc_id = str(doc.get('id', ''))
+            if not doc_id:
+                Log.error(f"导出 PDF 失败,缺少 doc_id: {doc_title}")
+                return False
+            Log.info(f"正在导出 PDF (id: {doc_id}): {doc_title}")
+            success = await self.client.export_pdf(doc_id, file_path)
             if success:
                 answer.downloaded_files.append(file_path)
                 Log.success(f"保存成功: {os.path.relpath(file_path, book_dir)}")

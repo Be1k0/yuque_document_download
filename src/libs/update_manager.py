@@ -105,7 +105,7 @@ class UpdateManager:
         """获取最新版本信息"""
         headers = {
             "Accept": "application/vnd.github+json",
-            "User-Agent": "yuque-document-download-updater",
+            "User-Agent": "YuQue-BdT-updater",
         }
 
         async with aiohttp.ClientSession(headers=headers) as session:
@@ -201,7 +201,7 @@ class UpdateManager:
         target_path = self._update_dir / target_name
         temp_path = target_path.with_suffix(target_path.suffix + ".download")
 
-        headers = {"User-Agent": "yuque-document-download-updater"}
+        headers = {"User-Agent": "YuQue-BdT-updater"}
         ssl_context = False if GLOBAL_CONFIG.disable_ssl else None
         download_url = self.build_download_url(release_info.asset.download_url)
 
