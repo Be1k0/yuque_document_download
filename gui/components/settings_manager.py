@@ -821,7 +821,7 @@ class SettingsManagerMixin:
         description_title.setStyleSheet("color: @text_color;")
         info_layout.addWidget(description_title)
 
-        description_text = QLabel("YuQue-BdT 是一款针对语雀开发的知识库批量导出 GUI 工具，采用Python开发，支持一键导出个人账号下全部知识库文档，同时也可下载他人公开的语雀知识库。")
+        description_text = QLabel("YuQue-BdT 是一款针对语雀开发的知识库批量导出 GUI 工具，采用Python开发，支持一键导出个人账号下全类型的知识库文档，同时也可下载他人公开的语雀知识库。\n软件开源免费，致力于帮助用户更方便地备份和迁移语雀上的知识内容。")
         description_text.setWordWrap(True)
         description_text.setFont(QFont("", 14))
         description_text.setStyleSheet("color: @text_secondary; padding: 5px 0;")
